@@ -8,9 +8,11 @@ import { Calendar, Download, TrendingUp, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import { generateInvoiceNumber } from "@/utils/invoiceUtils";
 
 interface IndividualBookingMetrics {
   bookingId: string;
+  invoiceNumber: string;
   customerState: string;
   eventName: string;
   ticketCount: number;
@@ -162,6 +164,7 @@ const ComprehensiveFinancialReport = () => {
       
       return {
         bookingId: booking.id,
+        invoiceNumber: generateInvoiceNumber(booking.id, booking.created_at),
         customerState,
         eventName,
         ticketCount: quantity,
@@ -382,6 +385,7 @@ const ComprehensiveFinancialReport = () => {
       ['Total Sale Value = A + B (Ticket Price + Convenience Fee)'],
       [''],
       [
+        'Invoice Number',
         'Booking ID',
         'Customer State',
         'Event Name',
@@ -403,6 +407,7 @@ const ComprehensiveFinancialReport = () => {
         'Booking Date'
       ],
       ...individualBookingsData.map(booking => [
+        booking.invoiceNumber,
         booking.bookingId,
         booking.customerState,
         booking.eventName,
@@ -427,6 +432,7 @@ const ComprehensiveFinancialReport = () => {
 
     if (totalData) {
       exportData.push([
+        'TOTAL',
         'TOTAL',
         'ALL STATES',
         'ALL EVENTS',
@@ -537,6 +543,7 @@ const ComprehensiveFinancialReport = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="min-w-[140px]">Invoice Number</TableHead>
                     <TableHead className="min-w-[120px]">Booking ID</TableHead>
                     <TableHead className="min-w-[120px]">Customer State</TableHead>
                     <TableHead className="min-w-[150px]">Event Name</TableHead>
@@ -561,6 +568,7 @@ const ComprehensiveFinancialReport = () => {
                 <TableBody>
                   {individualBookingsData.map((booking, index) => (
                     <TableRow key={index}>
+                      <TableCell className="font-mono text-sm">{booking.invoiceNumber}</TableCell>
                       <TableCell className="font-mono text-sm">{booking.bookingId.slice(0, 8)}...</TableCell>
                       <TableCell className="font-medium bg-blue-50">{booking.customerState}</TableCell>
                       <TableCell className="font-medium bg-green-50">{booking.eventName}</TableCell>
@@ -584,6 +592,7 @@ const ComprehensiveFinancialReport = () => {
                   ))}
                   {totalData && (
                     <TableRow className="border-t-2 border-primary font-bold bg-muted/50">
+                      <TableCell className="font-bold">TOTAL</TableCell>
                       <TableCell className="font-bold">TOTAL</TableCell>
                       <TableCell className="font-bold">ALL STATES</TableCell>
                       <TableCell className="font-bold">ALL EVENTS</TableCell>
