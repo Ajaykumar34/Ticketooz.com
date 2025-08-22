@@ -30,7 +30,7 @@ export const calculateCommission = (
 };
 
 /**
- * Get pricing for a specific seat category
+ * Get pricing for a specific seat category - Enhanced to handle category name matching
  */
 export const getSeatCategoryPricing = (
   seatCategoryId: string | null,
@@ -39,19 +39,38 @@ export const getSeatCategoryPricing = (
   console.log('[SeatPricing] Getting pricing for category:', seatCategoryId);
   console.log('[SeatPricing] Available pricing data:', pricingData.map(p => ({
     seat_category_id: p.seat_category_id,
+    category_name: p.seat_categories?.name,
     base_price: p.base_price,
-    convenience_fee: p.convenience_fee,
     convenience_fee_type: p.convenience_fee_type,
     convenience_fee_value: p.convenience_fee_value
   })));
 
-  // Find category-specific pricing
-  const categoryPricing = pricingData.find(p => p.seat_category_id === seatCategoryId);
+  // First try to find by exact category ID match
+  let categoryPricing = pricingData.find(p => p.seat_category_id === seatCategoryId);
+  
+  // If no exact match found and we have a seat category ID, try to match by category name
+  if (!categoryPricing && seatCategoryId && pricingData.length > 0) {
+    // Extract category name from the seat layout (this is a fallback approach)
+    // We'll try to match based on typical category names
+    const categoryNames = pricingData.map(p => p.seat_categories?.name).filter(Boolean);
+    console.log('[SeatPricing] Available category names for fallback:', categoryNames);
+    
+    // Try to match Premium categories first
+    if (categoryNames.includes('Premium')) {
+      categoryPricing = pricingData.find(p => p.seat_categories?.name === 'Premium');
+      console.log('[SeatPricing] Using Premium category as fallback');
+    }
+    // Then try General categories
+    else if (categoryNames.includes('General')) {
+      categoryPricing = pricingData.find(p => p.seat_categories?.name === 'General');
+      console.log('[SeatPricing] Using General category as fallback');
+    }
+  }
   
   if (categoryPricing) {
     const basePrice = categoryPricing.base_price || 0;
     
-    // Calculate convenience fee
+    // Calculate convenience fee using new pricing structure
     let convenienceFee = 0;
     if (categoryPricing.convenience_fee_type && categoryPricing.convenience_fee_value !== undefined) {
       convenienceFee = calculateConvenienceFee(
@@ -86,25 +105,25 @@ export const getSeatCategoryPricing = (
     return result;
   }
 
-  // Fallback to general event pricing
-  const generalPricing = pricingData.find(p => p.seat_category_id === null);
-  if (generalPricing) {
-    const basePrice = generalPricing.base_price || 0;
+  // If no specific category found, use the first available pricing as fallback
+  if (pricingData.length > 0) {
+    const fallbackPricing = pricingData[0];
+    const basePrice = fallbackPricing.base_price || 0;
     
     let convenienceFee = 0;
-    if (generalPricing.convenience_fee_type && generalPricing.convenience_fee_value !== undefined) {
+    if (fallbackPricing.convenience_fee_type && fallbackPricing.convenience_fee_value !== undefined) {
       convenienceFee = calculateConvenienceFee(
         basePrice,
-        generalPricing.convenience_fee_type,
-        generalPricing.convenience_fee_value
+        fallbackPricing.convenience_fee_type,
+        fallbackPricing.convenience_fee_value
       );
-    } else if (generalPricing.convenience_fee !== undefined) {
-      convenienceFee = generalPricing.convenience_fee;
+    } else if (fallbackPricing.convenience_fee !== undefined) {
+      convenienceFee = fallbackPricing.convenience_fee;
     }
     
-    const commission = generalPricing.commission_type && generalPricing.commission_value !== undefined
-      ? calculateCommission(basePrice, generalPricing.commission_type, generalPricing.commission_value)
-      : (generalPricing.commission || 0);
+    const commission = fallbackPricing.commission_type && fallbackPricing.commission_value !== undefined
+      ? calculateCommission(basePrice, fallbackPricing.commission_type, fallbackPricing.commission_value)
+      : (fallbackPricing.commission || 0);
 
     const result = {
       basePrice,
@@ -113,50 +132,57 @@ export const getSeatCategoryPricing = (
       commission
     };
     
-    console.log('[SeatPricing] Using general pricing:', result);
+    console.log('[SeatPricing] Using fallback pricing from first available category:', result);
     return result;
   }
 
-  // Final fallback
-  console.log('[SeatPricing] Using default fallback pricing');
+  // Final fallback - should rarely be used
+  console.log('[SeatPricing] Using default fallback pricing - no pricing data available');
   return {
-    basePrice: 500,
-    convenienceFee: 50,
-    totalPrice: 550,
+    basePrice: 100,
+    convenienceFee: 10,
+    totalPrice: 110,
     commission: 0
   };
 };
 
 /**
- * Get pricing for a specific seat - Enhanced version with better category ID extraction
+ * Get pricing for a specific seat - Enhanced to handle category ID/name mismatches
  */
 export const getSeatPricing = (seat: any, pricingData: SeatPricingData[]): CalculatedSeatPricing => {
   console.log('[SeatPricing] Processing seat for pricing:', {
     seatId: seat?.id,
     seatNumber: seat?.seat_number,
     rowName: seat?.row_name,
-    seatObject: seat
+    seatCategoryId: seat?.seat_category_id,
+    seatCategories: seat?.seat_categories
   });
 
-  // Enhanced seat category ID extraction with multiple fallback options
+  // Enhanced seat category ID extraction
   let seatCategoryId = null;
+  let categoryName = null;
   
-  // Try different ways to get the seat category ID
+  // Try different ways to get the seat category information
   if (seat?.seat_category_id) {
     seatCategoryId = seat.seat_category_id;
-    console.log('[SeatPricing] Found seat_category_id directly:', seatCategoryId);
+    categoryName = seat?.seat_categories?.name;
   } else if (seat?.seat_categories?.id) {
     seatCategoryId = seat.seat_categories.id;
-    console.log('[SeatPricing] Found seat category ID from seat_categories object:', seatCategoryId);
+    categoryName = seat.seat_categories.name;
   } else if (seat?.category) {
     seatCategoryId = seat.category;
-    console.log('[SeatPricing] Found category from legacy field:', seatCategoryId);
-  } else {
-    console.log('[SeatPricing] No seat category ID found, will use general pricing');
   }
 
-  console.log('[SeatPricing] Final seat category ID for pricing lookup:', seatCategoryId);
-  console.log('[SeatPricing] Available pricing data count:', pricingData.length);
-  
+  console.log('[SeatPricing] Extracted category info:', { seatCategoryId, categoryName });
+
+  // If we have category name but pricing doesn't match by ID, try to match by name
+  if (categoryName && pricingData.length > 0) {
+    const pricingByName = pricingData.find(p => p.seat_categories?.name === categoryName);
+    if (pricingByName) {
+      console.log('[SeatPricing] Found pricing match by category name:', categoryName);
+      return getSeatCategoryPricing(pricingByName.seat_category_id, pricingData);
+    }
+  }
+
   return getSeatCategoryPricing(seatCategoryId, pricingData);
 };
