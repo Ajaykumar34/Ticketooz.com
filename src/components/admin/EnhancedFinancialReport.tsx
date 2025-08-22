@@ -8,6 +8,7 @@ import { Calendar, Download, FileSpreadsheet, TrendingUp, Save } from "lucide-re
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import { generateInvoiceNumber } from "@/utils/invoiceUtils";
 
 interface TransactionItem {
   id: string;
@@ -24,6 +25,7 @@ interface TransactionItem {
   eventState: string;
   createdAt: string;
   quantity: number;
+  invoiceNumber: string;
 }
 
 interface FinancialData {
@@ -142,7 +144,8 @@ const EnhancedFinancialReport = () => {
         customerState: t.customer_state || 'Unknown',
         eventState: t.events?.venues?.state || t.event_state || 'Unknown',
         createdAt: t.created_at,
-        quantity: quantity
+        quantity: quantity,
+        invoiceNumber: generateInvoiceNumber(t.id, t.created_at)
       };
     });
   };
@@ -448,8 +451,9 @@ const EnhancedFinancialReport = () => {
         ['Date Range:', `${startDate} to ${endDate}`],
         ['Generated:', new Date().toLocaleString()],
         [''],
-        ['Event Name', 'Per Ticket Base Price', 'Per Ticket Conv Fee', 'Per Ticket Commission', 'Per Ticket Actual Commission', 'Per Ticket Total', 'Quantity', 'Total for All Tickets', 'Customer State', 'Event State', 'Date'],
+        ['Invoice Number', 'Event Name', 'Per Ticket Base Price', 'Per Ticket Conv Fee', 'Per Ticket Commission', 'Per Ticket Actual Commission', 'Per Ticket Total', 'Quantity', 'Total for All Tickets', 'Customer State', 'Event State', 'Date'],
         ...transactionItems.map(item => [
+          item.invoiceNumber,
           item.eventName,
           item.ticketPrice.toFixed(2),
           item.convenienceFee.toFixed(2),
@@ -660,6 +664,7 @@ const EnhancedFinancialReport = () => {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Invoice Number</TableHead>
                   <TableHead>Event Name</TableHead>
                   <TableHead className="text-right">Per Ticket Base Price</TableHead>
                   <TableHead className="text-right">Per Ticket Conv Fee</TableHead>
@@ -674,6 +679,7 @@ const EnhancedFinancialReport = () => {
               <TableBody>
                 {transactionItems.map((item, index) => (
                   <TableRow key={index}>
+                    <TableCell className="font-mono text-sm">{item.invoiceNumber}</TableCell>
                     <TableCell>{item.eventName}</TableCell>
                     <TableCell className="text-right">₹{item.ticketPrice.toLocaleString()}</TableCell>
                     <TableCell className="text-right">₹{item.convenienceFee.toLocaleString()}</TableCell>
