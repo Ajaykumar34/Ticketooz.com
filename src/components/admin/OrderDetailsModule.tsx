@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -68,7 +67,18 @@ const OrderDetailsModule = () => {
         .order('booking_date', { ascending: false });
 
       if (error) throw error;
-      setBookings(data || []);
+      
+      // Transform the data to match our Booking interface
+      const transformedBookings = (data || []).map((booking: any) => ({
+        ...booking,
+        seat_numbers: Array.isArray(booking.seat_numbers) 
+          ? booking.seat_numbers 
+          : (typeof booking.seat_numbers === 'string' 
+              ? JSON.parse(booking.seat_numbers) 
+              : [])
+      }));
+      
+      setBookings(transformedBookings);
     } catch (error) {
       console.error('Error fetching bookings:', error);
       toast.error('Failed to fetch bookings');
