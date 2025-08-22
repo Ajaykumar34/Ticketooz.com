@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,7 +19,7 @@ interface SeatMapProps {
 
 const SeatMap = ({ eventId, onSeatSelect }: SeatMapProps) => {
   const { seatLayout, loading, error } = useSeatMap(eventId);
-  const { pricingData } = useSeatPricing(eventId);
+  const { pricingData, loading: pricingLoading, error: pricingError } = useSeatPricing(eventId);
   const { bookedSeats, loading: bookedSeatsLoading, error: bookedSeatsError } = useBookedSeats(eventId);
   const { availability, loading: availabilityLoading } = useGeneralAdmissionAvailability(eventId);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
@@ -28,10 +27,11 @@ const SeatMap = ({ eventId, onSeatSelect }: SeatMapProps) => {
   const [isSoldOut, setIsSoldOut] = useState(false);
   const { toast } = useToast();
 
-  // Debug the pricing data
+  // Enhanced debugging for pricing data
   useEffect(() => {
+    console.log('[SeatMap] Pricing data loading state:', { pricingLoading, pricingError });
     if (pricingData && pricingData.length > 0) {
-      console.log('[SeatMap] Pricing data loaded:', pricingData.map(pricing => ({
+      console.log('[SeatMap] Pricing data loaded successfully:', pricingData.map(pricing => ({
         id: pricing.id,
         seat_category_id: pricing.seat_category_id,
         base_price: pricing.base_price,
@@ -40,8 +40,26 @@ const SeatMap = ({ eventId, onSeatSelect }: SeatMapProps) => {
         convenience_fee_value: pricing.convenience_fee_value,
         category_name: pricing.seat_categories?.name
       })));
+    } else if (!pricingLoading && pricingData.length === 0) {
+      console.warn('[SeatMap] No pricing data found for event:', eventId);
     }
-  }, [pricingData]);
+  }, [pricingData, pricingLoading, pricingError, eventId]);
+
+  // Enhanced debugging for seat layout data
+  useEffect(() => {
+    if (seatLayout && seatLayout.seats) {
+      console.log('[SeatMap] Seat layout loaded:', {
+        totalSeats: seatLayout.seats.length,
+        sampleSeatStructure: seatLayout.seats.slice(0, 3).map(seat => ({
+          id: seat.id,
+          seat_number: seat.seat_number,
+          row_name: seat.row_name,
+          seat_category_id: seat.seat_category_id,
+          seat_categories: seat.seat_categories
+        }))
+      });
+    }
+  }, [seatLayout]);
 
   // Debug booked seats with enhanced logging
   useEffect(() => {
@@ -97,13 +115,26 @@ const SeatMap = ({ eventId, onSeatSelect }: SeatMapProps) => {
     }
   }, [bookedSeatsError, toast]);
 
+  // Show error for pricing data if any
+  useEffect(() => {
+    if (pricingError) {
+      console.error('[SeatMap] Error loading pricing data:', pricingError);
+      toast({
+        title: "Warning",
+        description: "Unable to load seat pricing. Default pricing will be used.",
+        variant: "destructive",
+      });
+    }
+  }, [pricingError, toast]);
+
   // Render different UI states based on loading/error/data conditions
-  if (loading || bookedSeatsLoading || availabilityLoading) {
+  if (loading || bookedSeatsLoading || availabilityLoading || pricingLoading) {
     return (
       <Card>
         <CardContent className="p-8 text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p>Loading seat map and availability...</p>
+          <p>Loading seat map, availability, and pricing...</p>
+          {pricingLoading && <p className="text-sm text-gray-500 mt-2">Loading pricing data...</p>}
         </CardContent>
       </Card>
     );
@@ -205,16 +236,24 @@ const SeatMap = ({ eventId, onSeatSelect }: SeatMapProps) => {
     if (onSeatSelect) {
       const selectedSeatObjects = newSelectedSeats.map(id => {
         const seatData = seatLayout.seats.find(s => s.id === id);
+        
+        // Enhanced pricing calculation with better error handling
+        console.log('[SeatMap] Getting pricing for seat:', {
+          seatId: id,
+          seatData: seatData,
+          pricingDataAvailable: pricingData.length > 0
+        });
+
         const pricing = getSeatPricing(seatData, pricingData);
         
-        console.log('[SeatMap] Seat pricing calculation:', {
+        console.log('[SeatMap] Seat pricing calculation result:', {
           seatNumber: seatData?.seat_number,
           categoryId: seatData?.seat_category_id,
           categoryName: seatData?.seat_categories?.name,
           basePrice: pricing.basePrice,
           convenienceFee: pricing.convenienceFee,
           totalPrice: pricing.totalPrice,
-          pricingData: pricingData
+          pricingDataCount: pricingData.length
         });
         
         // Return in the exact format needed for database insertion
@@ -371,7 +410,8 @@ const SeatMap = ({ eventId, onSeatSelect }: SeatMapProps) => {
     bookedSeatsData: bookedSeats.length,
     exactlyBookedSeats,
     selectedSeatsCount: selectedSeats.length,
-    isSoldOut
+    isSoldOut,
+    pricingDataCount: pricingData.length
   });
 
   return (
@@ -383,6 +423,7 @@ const SeatMap = ({ eventId, onSeatSelect }: SeatMapProps) => {
           <p>Available: {totalAvailableSeats - exactlyBookedSeats} / {totalAvailableSeats} seats</p>
           <p>Booked: {exactlyBookedSeats} seats</p>
           {bookedSeatsLoading && <p className="text-orange-600">Checking availability...</p>}
+          {pricingLoading && <p className="text-blue-600">Loading pricing...</p>}
           {exactlyBookedSeats >= totalAvailableSeats && totalAvailableSeats > 0 && (
             <Badge variant="destructive" className="font-semibold">SOLD OUT</Badge>
           )}
@@ -509,6 +550,22 @@ const SeatMap = ({ eventId, onSeatSelect }: SeatMapProps) => {
               </div>
             </div>
           )}
+
+          {/* Pricing Status Indicator */}
+          <div className="text-center">
+            {pricingLoading && (
+              <p className="text-sm text-blue-600">Loading seat pricing...</p>
+            )}
+            {pricingError && (
+              <p className="text-sm text-red-600">Error loading pricing - using defaults</p>
+            )}
+            {!pricingLoading && !pricingError && pricingData.length === 0 && (
+              <p className="text-sm text-yellow-600">No pricing data found - using defaults</p>
+            )}
+            {!pricingLoading && !pricingError && pricingData.length > 0 && (
+              <p className="text-sm text-green-600">Pricing loaded from database</p>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>

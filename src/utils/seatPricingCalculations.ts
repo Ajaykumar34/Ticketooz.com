@@ -1,3 +1,4 @@
+
 import { SeatPricingData, CalculatedSeatPricing } from '@/types/pricing';
 
 /**
@@ -127,9 +128,35 @@ export const getSeatCategoryPricing = (
 };
 
 /**
- * Get pricing for a specific seat
+ * Get pricing for a specific seat - Enhanced version with better category ID extraction
  */
 export const getSeatPricing = (seat: any, pricingData: SeatPricingData[]): CalculatedSeatPricing => {
-  const seatCategoryId = seat?.seat_category_id || seat?.seat_categories?.id;
+  console.log('[SeatPricing] Processing seat for pricing:', {
+    seatId: seat?.id,
+    seatNumber: seat?.seat_number,
+    rowName: seat?.row_name,
+    seatObject: seat
+  });
+
+  // Enhanced seat category ID extraction with multiple fallback options
+  let seatCategoryId = null;
+  
+  // Try different ways to get the seat category ID
+  if (seat?.seat_category_id) {
+    seatCategoryId = seat.seat_category_id;
+    console.log('[SeatPricing] Found seat_category_id directly:', seatCategoryId);
+  } else if (seat?.seat_categories?.id) {
+    seatCategoryId = seat.seat_categories.id;
+    console.log('[SeatPricing] Found seat category ID from seat_categories object:', seatCategoryId);
+  } else if (seat?.category) {
+    seatCategoryId = seat.category;
+    console.log('[SeatPricing] Found category from legacy field:', seatCategoryId);
+  } else {
+    console.log('[SeatPricing] No seat category ID found, will use general pricing');
+  }
+
+  console.log('[SeatPricing] Final seat category ID for pricing lookup:', seatCategoryId);
+  console.log('[SeatPricing] Available pricing data count:', pricingData.length);
+  
   return getSeatCategoryPricing(seatCategoryId, pricingData);
 };
