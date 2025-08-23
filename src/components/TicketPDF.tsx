@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
 import { supabase } from '@/integrations/supabase/client';
+import { generateInvoiceNumber } from '@/utils/invoiceUtils';
 
 interface TicketData {
   booking: {
@@ -577,8 +578,9 @@ export const generateTicketPDF = async (ticketData: TicketData & { eventOccurren
     });
   }
   
-  // Use formatted booking ID or fall back to regular booking ID
-  let formattedBookingId = ticketData.formattedBookingId || ticketData.booking.id;
+  // Generate formatted booking ID using invoice utils
+  const formattedBookingId = generateInvoiceNumber(ticketData.booking.id, ticketData.booking.booking_date);
+  console.log('Generated formatted booking ID for PDF:', formattedBookingId);
 
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -902,7 +904,8 @@ export const generateTicketPDF = async (ticketData: TicketData & { eventOccurren
     doc.text('Combined Booking IDs:', leftColumnX, currentY);
     currentY += config.lineHeight;
     combinedBookingIds.forEach((id: string, index: number) => {
-      const shortId = id.slice(0, 20) + (id.length > 20 ? '...' : '');
+      const formattedCombinedId = generateInvoiceNumber(id, ticketData.booking.booking_date);
+      const shortId = formattedCombinedId.slice(0, 20) + (formattedCombinedId.length > 20 ? '...' : '');
       currentY = addTextWithLineBreaks(doc, `${index + 1}. ${shortId}`, leftColumnX, currentY, leftColumnWidth, config.fontSize.body);
     });
   } else {
@@ -920,7 +923,7 @@ export const generateTicketPDF = async (ticketData: TicketData & { eventOccurren
     qrY = addNewPageWithHeader(doc, config, contentWidth) + 20;
   }
   
-  // Generate QR code with proper verification URL
+  // Generate QR code with proper verification URL using formatted booking ID
   const verificationUrl = `${window.location.origin}/verify-ticket/${formattedBookingId}`;
   console.log('Generated QR verification URL:', verificationUrl);
   
@@ -1091,6 +1094,6 @@ export const generateTicketPDF = async (ticketData: TicketData & { eventOccurren
     noticesY += 4;
   });
   
-  // Download the PDF
+  // Download the PDF with formatted booking ID
   doc.save(`ticket-${formattedBookingId}.pdf`);
 };
