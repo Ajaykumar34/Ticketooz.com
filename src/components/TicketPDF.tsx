@@ -277,24 +277,31 @@ const fetchPricingData = async (bookingId: string): Promise<BackendPricing | nul
   }
 };
 
-// Responsive PDF configuration
+// Enhanced responsive PDF configuration with better mobile support
 const getResponsiveConfig = (pageWidth: number, pageHeight: number) => {
   const isSmallFormat = pageWidth < 150 || pageHeight < 200;
   const isMediumFormat = pageWidth >= 150 && pageWidth < 200;
+  const isLargeFormat = pageWidth >= 200;
+  
+  // Dynamic scaling based on actual page dimensions
+  const baseScale = Math.min(pageWidth / 210, pageHeight / 297); // A4 reference
   
   return {
-    margin: Math.max(10, pageWidth * 0.04),
-    headerHeight: isSmallFormat ? 20 : 30,
+    margin: Math.max(8, pageWidth * 0.035),
+    headerHeight: isSmallFormat ? 18 : (isMediumFormat ? 25 : 32),
     fontSize: {
-      title: isSmallFormat ? 14 : Math.max(18, pageWidth * 0.06),
-      subtitle: isSmallFormat ? 8 : Math.max(10, pageWidth * 0.025),
-      heading: isSmallFormat ? 10 : Math.max(12, pageWidth * 0.03),
-      body: isSmallFormat ? 7 : Math.max(9, pageWidth * 0.022),
-      small: isSmallFormat ? 6 : Math.max(7, pageWidth * 0.018)
+      title: Math.max(12, Math.min(20, pageWidth * 0.065 * baseScale)),
+      subtitle: Math.max(7, Math.min(12, pageWidth * 0.028 * baseScale)),
+      heading: Math.max(9, Math.min(14, pageWidth * 0.032 * baseScale)),
+      body: Math.max(7, Math.min(11, pageWidth * 0.024 * baseScale)),
+      small: Math.max(6, Math.min(9, pageWidth * 0.020 * baseScale))
     },
-    lineHeight: isSmallFormat ? 4 : 6,
-    sectionSpacing: isSmallFormat ? 8 : 12,
-    qrSize: isSmallFormat ? 30 : Math.min(50, pageWidth * 0.12)
+    lineHeight: isSmallFormat ? 3.5 : (isMediumFormat ? 5 : 6.5),
+    sectionSpacing: isSmallFormat ? 6 : (isMediumFormat ? 9 : 14),
+    qrSize: Math.max(25, Math.min(60, pageWidth * 0.14)),
+    columnSplit: isSmallFormat ? 0.95 : (isMediumFormat ? 0.65 : 0.58), // Single column for small screens
+    contentPadding: Math.max(3, pageWidth * 0.015),
+    maxTextWidth: isSmallFormat ? pageWidth * 0.85 : pageWidth * 0.45
   };
 };
 
@@ -321,77 +328,63 @@ const addNewPageWithHeader = (doc: jsPDF, config: any, contentWidth: number) => 
   doc.setTextColor(...blackColor);
   doc.setFontSize(config.fontSize.title);
   doc.setFont('helvetica', 'bold');
-  doc.text('TICKETOOZ.COM', config.margin + 5, 28);
+  doc.text('TICKETOOZ.COM', config.margin + config.contentPadding, 28);
   
   doc.setFontSize(config.fontSize.subtitle);
   doc.setFont('helvetica', 'normal');
-  doc.text('Your Event Ticket (Continued)', config.margin + 5, 38);
+  doc.text('Your Event Ticket (Continued)', config.margin + config.contentPadding, 38);
   
   return 55; // Return starting Y position for content
 };
 
-// Helper function to split long text and handle line breaks
-const splitText = (doc: jsPDF, text: string, maxWidth: number, fontSize: number) => {
+// Responsive text rendering with better line breaking
+const addResponsiveText = (doc: jsPDF, text: string, x: number, y: number, maxWidth: number, fontSize: number, config: any) => {
   doc.setFontSize(fontSize);
   const lines = doc.splitTextToSize(text, maxWidth);
-  return Array.isArray(lines) ? lines : [lines];
-};
-
-// Helper function to add text with automatic line breaks and pagination
-const addTextWithLineBreaks = (doc: jsPDF, text: string, x: number, y: number, maxWidth: number, fontSize: number, lineHeight: number = 6) => {
-  const lines = splitText(doc, text, maxWidth, fontSize);
   let currentY = y;
   
-  lines.forEach((line: string) => {
-    // Check if we need a new page
-    if (checkPageSpace(doc, currentY, lineHeight)) {
-      currentY = addNewPageWithHeader(doc, getResponsiveConfig(doc.internal.pageSize.getWidth(), doc.internal.pageSize.getHeight()), maxWidth);
+  (Array.isArray(lines) ? lines : [lines]).forEach((line: string) => {
+    if (checkPageSpace(doc, currentY, config.lineHeight)) {
+      currentY = addNewPageWithHeader(doc, config, maxWidth);
     }
-    
     doc.text(line, x, currentY);
-    currentY += lineHeight;
+    currentY += config.lineHeight;
   });
   
   return currentY;
 };
 
-// Enhanced category display logic for recurring events
-const displayTicketBreakdown = (doc: jsPDF, ticketData: TicketData, backendPricing: BackendPricing | null, rightColumnX: number, rightColumnY: number, rightColumnWidth: number, config: any) => {
-  let currentY = rightColumnY;
-  
-  // Enhanced category display logic for recurring events
+// Enhanced category display with responsive layout
+const displayResponsiveTicketBreakdown = (doc: jsPDF, ticketData: TicketData, backendPricing: BackendPricing | null, layout: any, currentY: number, config: any) => {
   const isGeneralAdmission = !ticketData.selectedSeats || ticketData.selectedSeats.length === 0;
   
+  // Responsive section header
+  doc.setFontSize(config.fontSize.heading);
+  doc.setFont('helvetica', 'bold');
+  doc.text(layout.useStacked ? 'Tickets' : 'Ticket Information', layout.rightColumnX, currentY);
+  
+  currentY += config.sectionSpacing;
+  doc.setFontSize(config.fontSize.body);
+  doc.setFont('helvetica', 'normal');
+  
   if (isGeneralAdmission) {
-    // General Admission - Show ticket categories and quantities in summary format
-    doc.text('Admission Type:', rightColumnX, currentY);
+    // Responsive general admission display
+    doc.text('Type:', layout.rightColumnX, currentY);
     currentY += config.lineHeight;
     
-    // Create summary line - prioritize backend pricing for recurring events
     const categoryParts: string[] = [];
     
-    // For recurring events, prioritize backend pricing category breakdown
+    // Enhanced category logic (same as before)
     if (ticketData.event.is_recurring && backendPricing && backendPricing.categoryBreakdown && backendPricing.categoryBreakdown.length > 0) {
-      console.log('Creating recurring event ticket summary from backend category breakdown:', backendPricing.categoryBreakdown);
-      
       backendPricing.categoryBreakdown.forEach((category) => {
         categoryParts.push(`${category.category} × ${category.quantity}`);
       });
-    }
-    // Then try selectedGeneralTickets
-    else if (ticketData.selectedGeneralTickets && ticketData.selectedGeneralTickets.length > 0) {
-      console.log('Creating ticket summary from selectedGeneralTickets:', ticketData.selectedGeneralTickets);
-      
+    } else if (ticketData.selectedGeneralTickets && ticketData.selectedGeneralTickets.length > 0) {
       ticketData.selectedGeneralTickets.forEach((ticket) => {
         categoryParts.push(`${ticket.categoryName} × ${ticket.quantity}`);
       });
-    }
-    // Enhanced fallback for general admission with multiple categories from seat_numbers
-    else if (ticketData.booking.seat_numbers && Array.isArray(ticketData.booking.seat_numbers)) {
-      console.log('Creating ticket summary from seat_numbers:', ticketData.booking.seat_numbers);
-      
+    } else if (ticketData.booking.seat_numbers && Array.isArray(ticketData.booking.seat_numbers)) {
       const categoryMap = new Map<string, number>();
-      
       ticketData.booking.seat_numbers.forEach((seat: any) => {
         const category = seat.seat_category || seat.category || 'General';
         let quantity = 1;
@@ -400,83 +393,21 @@ const displayTicketBreakdown = (doc: jsPDF, ticketData: TicketData, backendPrici
         } else if (seat.booked_quantity) {
           quantity = typeof seat.booked_quantity === 'string' ? parseInt(seat.booked_quantity, 10) : seat.booked_quantity;
         }
-        
         categoryMap.set(category, (categoryMap.get(category) || 0) + quantity);
       });
-      
       categoryMap.forEach((quantity, category) => {
         categoryParts.push(`${category} × ${quantity}`);
       });
-    }
-    // Final fallback
-    else {
-      categoryParts.push(`General Admission × ${ticketData.booking.quantity}`);
+    } else {
+      categoryParts.push(`General × ${ticketData.booking.quantity}`);
     }
     
-    // Display the summary line
     const ticketSummary = categoryParts.join(', ');
-    console.log('Final ticket summary for PDF:', ticketSummary);
+    currentY = addResponsiveText(doc, ticketSummary, layout.rightColumnX, currentY, layout.rightColumnWidth, config.fontSize.body, config);
+    currentY += config.lineHeight;
     
-    currentY = addTextWithLineBreaks(doc, ticketSummary, rightColumnX, currentY, rightColumnWidth, config.fontSize.body);
-    currentY += config.lineHeight * 2;
-    
-    // Show detailed breakdown if there are multiple categories
-    if (categoryParts.length > 1 || (backendPricing && backendPricing.categoryBreakdown && backendPricing.categoryBreakdown.length > 0)) {
-      doc.setFontSize(config.fontSize.small);
-      doc.text('Breakdown:', rightColumnX, currentY);
-      currentY += config.lineHeight;
-      
-      // Show category breakdown from backend pricing (prioritized for recurring events)
-      if (backendPricing && backendPricing.categoryBreakdown && backendPricing.categoryBreakdown.length > 0) {
-        backendPricing.categoryBreakdown.forEach((category) => {
-          if (checkPageSpace(doc, currentY, 25)) {
-            currentY = addNewPageWithHeader(doc, config, rightColumnWidth);
-            doc.setFontSize(config.fontSize.heading);
-            doc.setFont('helvetica', 'bold');
-            doc.text('Ticket Information (Continued)', rightColumnX, currentY);
-            currentY += config.sectionSpacing;
-            doc.setFontSize(config.fontSize.small);
-            doc.setFont('helvetica', 'normal');
-          }
-          
-          doc.text(`${category.category}:`, rightColumnX, currentY);
-          currentY += config.lineHeight;
-          doc.text(`Quantity: ${category.quantity}`, rightColumnX + 5, currentY);
-          currentY += config.lineHeight;
-          doc.text(`Unit Price: ₹${category.unitPrice.toFixed(2)}`, rightColumnX + 5, currentY);
-          currentY += config.lineHeight;
-          doc.text(`Total: ₹${category.totalPrice.toFixed(2)}`, rightColumnX + 5, currentY);
-          currentY += config.lineHeight * 1.5;
-        });
-      }
-      // Fallback to selectedGeneralTickets
-      else if (ticketData.selectedGeneralTickets && ticketData.selectedGeneralTickets.length > 0) {
-        ticketData.selectedGeneralTickets.forEach((ticket) => {
-          if (checkPageSpace(doc, currentY, 25)) {
-            currentY = addNewPageWithHeader(doc, config, rightColumnWidth);
-            doc.setFontSize(config.fontSize.heading);
-            doc.setFont('helvetica', 'bold');
-            doc.text('Ticket Information (Continued)', rightColumnX, currentY);
-            currentY += config.sectionSpacing;
-            doc.setFontSize(config.fontSize.small);
-            doc.setFont('helvetica', 'normal');
-          }
-          
-          doc.text(`${ticket.categoryName}:`, rightColumnX, currentY);
-          currentY += config.lineHeight;
-          doc.text(`Quantity: ${ticket.quantity}`, rightColumnX + 5, currentY);
-          currentY += config.lineHeight;
-          doc.text(`Unit Price: ₹${ticket.basePrice.toFixed(2)}`, rightColumnX + 5, currentY);
-          currentY += config.lineHeight;
-          doc.text(`Total: ₹${(ticket.basePrice * ticket.quantity).toFixed(2)}`, rightColumnX + 5, currentY);
-          currentY += config.lineHeight * 1.5;
-        });
-      }
-      
-      doc.setFontSize(config.fontSize.body);
-    }
   } else {
-    // Seat-based admission - Display in single line format "VIP Seats: A5, A4 General: B6, B7"
+    // Responsive seat-based display
     const seatsByCategory = new Map<string, string[]>();
     
     if (ticketData.selectedSeats && ticketData.selectedSeats.length > 0) {
@@ -499,21 +430,18 @@ const displayTicketBreakdown = (doc: jsPDF, ticketData: TicketData, backendPrici
       });
     }
     
-    // Create single line format: "VIP Seats: A5, A4 General: B6, B7"
     const categoryParts: string[] = [];
     seatsByCategory.forEach((seats, category) => {
       categoryParts.push(`${category}: ${seats.join(', ')}`);
     });
     
     const seatsDisplayText = categoryParts.join(' ');
-    const maxSeatWidth = rightColumnWidth;
-    currentY = addTextWithLineBreaks(doc, seatsDisplayText, rightColumnX, currentY, maxSeatWidth, config.fontSize.body);
-    currentY += 4;
+    currentY = addResponsiveText(doc, seatsDisplayText, layout.rightColumnX, currentY, layout.rightColumnWidth, config.fontSize.body, config);
   }
   
-  currentY += 8;
+  currentY += config.sectionSpacing;
   
-  // Calculate correct total seats - use backend pricing if available
+  // Responsive total seats display
   let totalSeats = ticketData.booking.quantity;
   if (backendPricing && backendPricing.actualTotalQuantity) {
     totalSeats = backendPricing.actualTotalQuantity;
@@ -523,14 +451,14 @@ const displayTicketBreakdown = (doc: jsPDF, ticketData: TicketData, backendPrici
     totalSeats = ticketData.selectedGeneralTickets.reduce((sum, ticket) => sum + ticket.quantity, 0);
   }
   
-  doc.text('Total Seats:', rightColumnX, currentY);
-  doc.text(totalSeats.toString(), rightColumnX + 30, currentY);
+  doc.text('Total:', layout.rightColumnX, currentY);
+  doc.text(totalSeats.toString(), layout.rightColumnX + (config.fontSize.body * 2), currentY);
   
-  return currentY;
+  return currentY + config.sectionSpacing;
 };
 
 export const generateTicketPDF = async (ticketData: TicketData & { eventOccurrenceId?: string }) => {
-  console.log('Generating PDF for booking:', ticketData.booking.id);
+  console.log('Generating responsive PDF for booking:', ticketData.booking.id);
 
   // Check if this is a combined booking
   const isCombinedBooking = (ticketData.booking as any).is_combined || false;
@@ -586,8 +514,9 @@ export const generateTicketPDF = async (ticketData: TicketData & { eventOccurren
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   
-  // Get responsive configuration
+  // Get enhanced responsive configuration
   const config = getResponsiveConfig(pageWidth, pageHeight);
+  const layout = getLayoutConfig(config, pageWidth);
   
   // Colors - properly typed as tuples
   const yellowColor: [number, number, number] = [255, 255, 0];
@@ -597,68 +526,57 @@ export const generateTicketPDF = async (ticketData: TicketData & { eventOccurren
   
   const contentWidth = pageWidth - (config.margin * 2);
   
-  // Header with yellow background
+  // Responsive header with yellow background
   doc.setFillColor(...yellowColor);
   doc.rect(config.margin, 15, contentWidth, config.headerHeight, 'F');
   
-  // Header text - DEXOTIX.COM
+  // Responsive header text
   doc.setTextColor(...blackColor);
   doc.setFontSize(config.fontSize.title);
   doc.setFont('helvetica', 'bold');
-  doc.text('TICKETOOZ.COM', config.margin + 5, 28);
+  doc.text('TICKETOOZ.COM', config.margin + config.contentPadding, 28);
   
   doc.setFontSize(config.fontSize.subtitle);
   doc.setFont('helvetica', 'normal');
   const ticketTypeText = isCombinedBooking ? 'Your Combined Event Tickets' : 'Your Event Ticket';
-  doc.text(ticketTypeText, config.margin + 5, 38);
+  doc.text(ticketTypeText, config.margin + config.contentPadding, 38);
   
-  // Main content area - Improved layout for general admission
+  // Responsive main content area
   let currentY = 55;
-  const leftColumnX = config.margin + 5;
-  const rightColumnX = pageWidth * 0.6;
-  const leftColumnWidth = (pageWidth * 0.55) - 10;
-  const rightColumnWidth = (pageWidth * 0.35) - 10;
   
-  // Event Details Section (Left Column)
+  // Event Details Section with responsive layout
   if (checkPageSpace(doc, currentY, 60)) {
     currentY = addNewPageWithHeader(doc, config, contentWidth);
   }
   
   doc.setFontSize(config.fontSize.heading);
   doc.setFont('helvetica', 'bold');
-  doc.text('Event Details', leftColumnX, currentY);
+  doc.text('Event Details', layout.leftColumnX, currentY);
   
   currentY += config.sectionSpacing;
   const detailsStartY = currentY;
   doc.setFontSize(config.fontSize.body);
   doc.setFont('helvetica', 'normal');
   
-  // Event name with line wrapping and pagination
-  doc.text('Event:', leftColumnX, currentY);
+  // Responsive event information
+  doc.text('Event:', layout.leftColumnX, currentY);
   currentY += config.lineHeight;
-  currentY = addTextWithLineBreaks(doc, ticketData.event.name || 'Event Name', leftColumnX, currentY, leftColumnWidth, config.fontSize.body);
+  currentY = addResponsiveText(doc, ticketData.event.name || 'Event Name', layout.leftColumnX, currentY, layout.leftColumnWidth, config.fontSize.body, config);
   currentY += config.lineHeight;
   
-  // Date & Time - FIXED for recurring events to use event_time column
+  // Responsive date & time with enhanced formatting
   if (checkPageSpace(doc, currentY, 20)) {
     currentY = addNewPageWithHeader(doc, config, contentWidth);
   }
   
-  doc.text('Date & Time:', leftColumnX, currentY);
+  doc.text('Date & Time:', layout.leftColumnX, currentY);
   
-  // FIXED: For recurring events, use occurrence date with event_time from event table
+  // Enhanced date/time logic (same as before)
   let eventDate: Date;
   let dateStr: string;
   let timeStr: string;
   
   if (ticketData.event.is_recurring && backendPricing?.occurrenceData) {
-    // Use occurrence-specific date but event_time from event table for recurring events
-    console.log('Using occurrence date with event_time for recurring event PDF:', {
-      occurrenceData: backendPricing.occurrenceData,
-      eventTime: backendPricing.eventTime || ticketData.event.event_time
-    });
-    
-    // Use occurrence date
     const occurrenceDate = new Date(backendPricing.occurrenceData.occurrence_date);
     dateStr = occurrenceDate.toLocaleDateString('en-US', {
       year: 'numeric',
@@ -666,10 +584,8 @@ export const generateTicketPDF = async (ticketData: TicketData & { eventOccurren
       day: '2-digit'
     });
     
-    // Use event_time from event table for recurring events
     const eventTime = backendPricing.eventTime || ticketData.event.event_time;
     if (eventTime) {
-      // Parse event_time (assuming it's in HH:MM format)
       const [hours, minutes] = eventTime.split(':').map(Number);
       const timeDate = new Date();
       timeDate.setHours(hours, minutes, 0, 0);
@@ -680,7 +596,6 @@ export const generateTicketPDF = async (ticketData: TicketData & { eventOccurren
         hour12: true
       });
     } else {
-      // Fallback to occurrence time if event_time is not available
       const occurrenceDateTime = `${backendPricing.occurrenceData.occurrence_date}T${backendPricing.occurrenceData.occurrence_time}`;
       eventDate = new Date(occurrenceDateTime);
       timeStr = eventDate.toLocaleTimeString('en-US', { 
@@ -689,14 +604,7 @@ export const generateTicketPDF = async (ticketData: TicketData & { eventOccurren
         hour12: true
       });
     }
-    
-    console.log('Formatted recurring event date/time for PDF:', { 
-      dateStr, 
-      timeStr,
-      eventTime: eventTime
-    });
   } else {
-    // Use event's default date/time for non-recurring events
     eventDate = new Date(ticketData.event.start_datetime);
     dateStr = eventDate.toLocaleDateString('en-US', {
       year: 'numeric',
@@ -708,145 +616,36 @@ export const generateTicketPDF = async (ticketData: TicketData & { eventOccurren
       minute: '2-digit',
       hour12: true
     });
-    
-    console.log('Using default event date/time for PDF:', { 
-      start_datetime: ticketData.event.start_datetime,
-      dateStr, 
-      timeStr,
-      eventDate: eventDate.toString()
-    });
   }
   
-  doc.text(`${dateStr} at ${timeStr}`, leftColumnX, currentY + config.lineHeight);
-  currentY += config.lineHeight * 3;
+  currentY = addResponsiveText(doc, `${dateStr} at ${timeStr}`, layout.leftColumnX, currentY + config.lineHeight, layout.leftColumnWidth, config.fontSize.body, config);
+  currentY += config.lineHeight;
   
-  // Category & Sub-category
-  if (ticketData.event.category) {
-    if (checkPageSpace(doc, currentY, 15)) {
-      currentY = addNewPageWithHeader(doc, config, contentWidth);
-    }
-    doc.text('Category:', leftColumnX, currentY);
-    doc.text(ticketData.event.category, leftColumnX, currentY + config.lineHeight);
-    currentY += config.lineHeight * 2;
-    
-    if (ticketData.event.sub_category) {
-      doc.text('Sub-category:', leftColumnX, currentY);
-      doc.text(ticketData.event.sub_category, leftColumnX, currentY + config.lineHeight);
-      currentY += config.lineHeight * 2;
-    }
-  }
-  
-  // Genre(s) - Handle both single genre and multiple genres
-  const displayGenres = ticketData.event.genres && ticketData.event.genres.length > 0 
-    ? ticketData.event.genres 
-    : (ticketData.event.genre ? [ticketData.event.genre] : []);
-  
-  if (displayGenres.length > 0) {
-    if (checkPageSpace(doc, currentY, 15)) {
-      currentY = addNewPageWithHeader(doc, config, contentWidth);
-    }
-    doc.text(displayGenres.length === 1 ? 'Genre:' : 'Genres:', leftColumnX, currentY);
-    const genresText = displayGenres.join(', ');
-    currentY = addTextWithLineBreaks(doc, genresText, leftColumnX, currentY + config.lineHeight, leftColumnWidth, config.fontSize.body);
-    currentY += config.lineHeight;
-  }
-  
-  // Language
-  if (ticketData.event.language) {
-    if (checkPageSpace(doc, currentY, 15)) {
-      currentY = addNewPageWithHeader(doc, config, contentWidth);
-    }
-    doc.text('Language:', leftColumnX, currentY);
-    doc.text(ticketData.event.language, leftColumnX, currentY + config.lineHeight);
-    currentY += config.lineHeight * 2;
-  }
-  
-  // Duration
-  if (ticketData.event.duration) {
-    if (checkPageSpace(doc, currentY, 15)) {
-      currentY = addNewPageWithHeader(doc, config, contentWidth);
-    }
-    doc.text('Duration:', leftColumnX, currentY);
-    doc.text(`${ticketData.event.duration} hours`, leftColumnX, currentY + config.lineHeight);
-    currentY += config.lineHeight * 2;
-  }
-  
-  // Tags
-  if (ticketData.event.tags && ticketData.event.tags.length > 0) {
-    if (checkPageSpace(doc, currentY, 20)) {
-      currentY = addNewPageWithHeader(doc, config, contentWidth);
-    }
-    doc.text('Tags:', leftColumnX, currentY);
-    const tagsText = ticketData.event.tags.join(', ');
-    currentY = addTextWithLineBreaks(doc, tagsText, leftColumnX, currentY + config.lineHeight, leftColumnWidth, config.fontSize.body);
-    currentY += config.lineHeight;
-  }
-  
-  // Artists
-  if (ticketData.event.artists && ticketData.event.artists.length > 0) {
-    if (checkPageSpace(doc, currentY, 20)) {
-      currentY = addNewPageWithHeader(doc, config, contentWidth);
-    }
-    doc.text(ticketData.event.artists.length === 1 ? 'Artist:' : 'Artists:', leftColumnX, currentY);
-    const artistNames = ticketData.event.artists.map(artist => artist.name).join(', ');
-    currentY = addTextWithLineBreaks(doc, artistNames, leftColumnX, currentY + config.lineHeight, leftColumnWidth, config.fontSize.body);
-    currentY += config.lineHeight;
-  } else if (ticketData.event.artist_name) {
-    if (checkPageSpace(doc, currentY, 15)) {
-      currentY = addNewPageWithHeader(doc, config, contentWidth);
-    }
-    doc.text('Artist:', leftColumnX, currentY);
-    currentY = addTextWithLineBreaks(doc, ticketData.event.artist_name, leftColumnX, currentY + config.lineHeight, leftColumnWidth, config.fontSize.body);
-    currentY += config.lineHeight;
-  }
-  
-  // Venue with line wrapping and pagination
+  // Responsive venue information
   if (checkPageSpace(doc, currentY, 20)) {
     currentY = addNewPageWithHeader(doc, config, contentWidth);
   }
   
-  doc.text('Venue:', leftColumnX, currentY);
+  doc.text('Venue:', layout.leftColumnX, currentY);
   currentY += config.lineHeight;
-  currentY = addTextWithLineBreaks(doc, ticketData.event.venue?.name || 'TBA', leftColumnX, currentY, leftColumnWidth, config.fontSize.body);
+  currentY = addResponsiveText(doc, ticketData.event.venue?.name || 'TBA', layout.leftColumnX, currentY, layout.leftColumnWidth, config.fontSize.body, config);
   currentY += config.lineHeight;
   
-  // Address with line wrapping and pagination
-  if (checkPageSpace(doc, currentY, 20)) {
-    currentY = addNewPageWithHeader(doc, config, contentWidth);
+  doc.text('Address:', layout.leftColumnX, currentY);
+  currentY += config.lineHeight;
+  currentY = addResponsiveText(doc, ticketData.event.venue?.address || 'TBA', layout.leftColumnX, currentY, layout.leftColumnWidth, config.fontSize.body, config);
+  
+  // Responsive ticket information section
+  let ticketY = layout.useStacked ? currentY + config.sectionSpacing * 2 : detailsStartY;
+  
+  if (!layout.useStacked && checkPageSpace(doc, ticketY, 100)) {
+    ticketY = addNewPageWithHeader(doc, config, contentWidth);
   }
   
-  doc.text('Address:', leftColumnX, currentY);
-  currentY += config.lineHeight;
-  currentY = addTextWithLineBreaks(doc, ticketData.event.venue?.address || 'TBA', leftColumnX, currentY, leftColumnWidth, config.fontSize.body);
+  ticketY = displayResponsiveTicketBreakdown(doc, ticketData, backendPricing, layout, ticketY, config);
   
-  // Ticket Information Section (Right Column) - Enhanced for recurring events
-  let rightColumnY = detailsStartY;
-  
-  // Check if we're on a new page due to left column content
-  const currentPageNumber = doc.getCurrentPageInfo().pageNumber;
-  if (currentPageNumber > 1) {
-    // If we're on a new page, start ticket info from the top
-    rightColumnY = 55;
-  }
-  
-  if (checkPageSpace(doc, rightColumnY, 100)) {
-    rightColumnY = addNewPageWithHeader(doc, config, contentWidth);
-  }
-  
-  doc.setFontSize(config.fontSize.heading);
-  doc.setFont('helvetica', 'bold');
-  const ticketInfoTitle = isCombinedBooking ? 'Combined Ticket Information' : 'Ticket Information';
-  doc.text(ticketInfoTitle, rightColumnX, rightColumnY);
-  
-  rightColumnY += config.sectionSpacing;
-  doc.setFontSize(config.fontSize.body);
-  doc.setFont('helvetica', 'normal');
-  
-  // Use the enhanced ticket breakdown display
-  rightColumnY = displayTicketBreakdown(doc, ticketData, backendPricing, rightColumnX, rightColumnY, rightColumnWidth, config);
-  
-  // Primary Guest Section - Enhanced name handling with booking data
-  currentY = Math.max(currentY, rightColumnY) + 20;
+  // Responsive customer information section
+  currentY = Math.max(currentY, ticketY) + config.sectionSpacing;
   
   if (checkPageSpace(doc, currentY, 80)) {
     currentY = addNewPageWithHeader(doc, config, contentWidth);
@@ -854,71 +653,56 @@ export const generateTicketPDF = async (ticketData: TicketData & { eventOccurren
   
   doc.setFontSize(config.fontSize.heading);
   doc.setFont('helvetica', 'bold');
-  doc.text('Primary Guest', leftColumnX, currentY);
+  doc.text('Customer Information', layout.leftColumnX, currentY);
   
   currentY += config.sectionSpacing;
   const guestStartY = currentY;
   doc.setFontSize(config.fontSize.body);
   doc.setFont('helvetica', 'normal');
   
-  // Enhanced customer details with proper name handling from booking data
-  doc.text('Name:', leftColumnX, currentY);
+  // Responsive customer details
+  doc.text('Name:', layout.leftColumnX, currentY);
   currentY += config.lineHeight;
   
-  // Use the updated customer info from booking data with improved full name display
   const firstName = customerInfo.firstName || '';
   const lastName = customerInfo.lastName || '';
   const fullName = `${firstName}${lastName ? ' ' + lastName : ''}`.trim();
   
-  console.log('Customer names for PDF - First:', firstName, 'Last:', lastName, 'Full:', fullName);
-  
   if (fullName) {
-    currentY = addTextWithLineBreaks(doc, fullName, leftColumnX, currentY, leftColumnWidth, config.fontSize.body);
+    currentY = addResponsiveText(doc, fullName, layout.leftColumnX, currentY, layout.leftColumnWidth, config.fontSize.body, config);
   } else {
-    currentY = addTextWithLineBreaks(doc, 'Guest User', leftColumnX, currentY, leftColumnWidth, config.fontSize.body);
+    currentY = addResponsiveText(doc, 'Guest User', layout.leftColumnX, currentY, layout.leftColumnWidth, config.fontSize.body, config);
   }
   currentY += config.lineHeight;
 
-  if (checkPageSpace(doc, currentY, 20)) {
-    currentY = addNewPageWithHeader(doc, config, contentWidth);
-  }
-  
-  doc.text('Email:', leftColumnX, currentY);
+  doc.text('Email:', layout.leftColumnX, currentY);
   currentY += config.lineHeight;
-  currentY = addTextWithLineBreaks(doc, customerInfo.email, leftColumnX, currentY, leftColumnWidth, config.fontSize.body);
+  currentY = addResponsiveText(doc, customerInfo.email, layout.leftColumnX, currentY, layout.leftColumnWidth, config.fontSize.body, config);
   currentY += config.lineHeight;
   
-  if (checkPageSpace(doc, currentY, 20)) {
-    currentY = addNewPageWithHeader(doc, config, contentWidth);
-  }
+  doc.text('Phone:', layout.leftColumnX, currentY);
+  currentY = addResponsiveText(doc, customerInfo.phone, layout.leftColumnX, currentY + config.lineHeight, layout.leftColumnWidth, config.fontSize.body, config);
+  currentY += config.lineHeight * 2;
   
-  doc.text('Phone:', leftColumnX, currentY);
-  doc.text(customerInfo.phone, leftColumnX, currentY + config.lineHeight);
-  currentY += config.lineHeight * 3;
-  
-  if (checkPageSpace(doc, currentY, 20)) {
-    currentY = addNewPageWithHeader(doc, config, contentWidth);
-  }
-  
+  // Responsive booking ID display
   if (isCombinedBooking && combinedBookingIds.length > 0) {
-    doc.text('Combined Booking IDs:', leftColumnX, currentY);
+    doc.text('Combined Booking IDs:', layout.leftColumnX, currentY);
     currentY += config.lineHeight;
     combinedBookingIds.forEach((id: string, index: number) => {
       const formattedCombinedId = generateInvoiceNumber(id, ticketData.booking.booking_date);
       const shortId = formattedCombinedId.slice(0, 20) + (formattedCombinedId.length > 20 ? '...' : '');
-      currentY = addTextWithLineBreaks(doc, `${index + 1}. ${shortId}`, leftColumnX, currentY, leftColumnWidth, config.fontSize.body);
+      currentY = addResponsiveText(doc, `${index + 1}. ${shortId}`, layout.leftColumnX, currentY, layout.leftColumnWidth, config.fontSize.body, config);
     });
   } else {
-    doc.text('Booking ID:', leftColumnX, currentY);
+    doc.text('Booking ID:', layout.leftColumnX, currentY);
     currentY += config.lineHeight;
-    currentY = addTextWithLineBreaks(doc, formattedBookingId, leftColumnX, currentY, leftColumnWidth, config.fontSize.body);
+    currentY = addResponsiveText(doc, formattedBookingId, layout.leftColumnX, currentY, layout.leftColumnWidth, config.fontSize.body, config);
   }
   
-  // QR Code positioning - Handle pagination
-  const qrX = rightColumnX;
-  let qrY = guestStartY;
+  // Responsive QR Code positioning
+  const qrX = layout.useStacked ? layout.leftColumnX : layout.rightColumnX;
+  let qrY = layout.useStacked ? currentY + config.sectionSpacing : guestStartY;
   
-  // Check if QR code section needs a new page
   if (checkPageSpace(doc, qrY, config.qrSize + 20)) {
     qrY = addNewPageWithHeader(doc, config, contentWidth) + 20;
   }
@@ -928,7 +712,6 @@ export const generateTicketPDF = async (ticketData: TicketData & { eventOccurren
   console.log('Generated QR verification URL:', verificationUrl);
   
   try {
-    // Generate QR code as data URL with proper verification URL
     const qrCodeDataUrl = await QRCode.toDataURL(verificationUrl, {
       width: config.qrSize * 3,
       margin: 1,
@@ -938,17 +721,13 @@ export const generateTicketPDF = async (ticketData: TicketData & { eventOccurren
       }
     });
     
-    // Add QR code image to PDF
     doc.addImage(qrCodeDataUrl, 'PNG', qrX, qrY, config.qrSize, config.qrSize);
-    
-    // Add QR code label
     doc.setFontSize(config.fontSize.small);
     doc.setFont('helvetica', 'normal');
-    doc.text('Scan to verify ticket', qrX, qrY + config.qrSize + 5);
+    doc.text('Scan to verify', qrX, qrY + config.qrSize + 5);
     
   } catch (error) {
     console.error('Failed to generate QR code:', error);
-    // Fallback: Draw rectangle with text
     doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(1);
     doc.rect(qrX, qrY, config.qrSize, config.qrSize);
@@ -959,8 +738,8 @@ export const generateTicketPDF = async (ticketData: TicketData & { eventOccurren
     doc.text('Error', qrX + config.qrSize/2 - 8, qrY + config.qrSize/2 + 8);
   }
   
-  // Payment Summary Section - Enhanced pricing display for recurring events
-  currentY += 30;
+  // Responsive payment summary section
+  currentY = Math.max(currentY, qrY + config.qrSize) + config.sectionSpacing * 2;
   
   if (checkPageSpace(doc, currentY, 100)) {
     currentY = addNewPageWithHeader(doc, config, contentWidth);
@@ -968,101 +747,78 @@ export const generateTicketPDF = async (ticketData: TicketData & { eventOccurren
   
   doc.setFontSize(config.fontSize.heading);
   doc.setFont('helvetica', 'bold');
-  doc.text('Payment Summary', leftColumnX, currentY);
+  doc.text('Payment Summary', layout.leftColumnX, currentY);
   
   currentY += config.sectionSpacing;
   doc.setFontSize(config.fontSize.body);
   doc.setFont('helvetica', 'normal');
   
+  // Responsive payment details (same logic as before but with responsive positioning)
   if (backendPricing) {
-    // Use actual backend pricing data for accurate display
-    console.log('Using backend pricing data for PDF payment summary:', backendPricing);
-    
     if (backendPricing.categoryBreakdown && backendPricing.categoryBreakdown.length > 0) {
-      // Display category-wise pricing from backend with pagination
       backendPricing.categoryBreakdown.forEach((category) => {
         if (checkPageSpace(doc, currentY, 10)) {
           currentY = addNewPageWithHeader(doc, config, contentWidth);
-          doc.setFontSize(config.fontSize.heading);
-          doc.setFont('helvetica', 'bold');
-          doc.text('Payment Summary (Continued)', leftColumnX, currentY);
-          currentY += config.sectionSpacing;
-          doc.setFontSize(config.fontSize.body);
-          doc.setFont('helvetica', 'normal');
         }
         
-        doc.text(`${category.category} (×${category.quantity}):`, leftColumnX, currentY);
-        doc.text(`₹${category.totalPrice.toFixed(2)}`, leftColumnX + 70, currentY);
-        currentY += 8;
+        doc.text(`${category.category} (×${category.quantity}):`, layout.leftColumnX, currentY);
+        doc.text(`₹${category.totalPrice.toFixed(2)}`, layout.leftColumnX + 70, currentY);
+        currentY += config.lineHeight + 2;
       });
     } else {
-      // General admission without specific categories
-      doc.text(`Tickets (×${ticketData.booking.quantity}):`, leftColumnX, currentY);
-      doc.text(`₹${backendPricing.basePrice.toFixed(2)}`, leftColumnX + 70, currentY);
-      currentY += 8;
+      doc.text(`Tickets (×${ticketData.booking.quantity}):`, layout.leftColumnX, currentY);
+      doc.text(`₹${backendPricing.basePrice.toFixed(2)}`, layout.leftColumnX + 70, currentY);
+      currentY += config.lineHeight + 2;
     }
     
-    // Show convenience fee breakdown
     if (backendPricing.convenienceFee > 0) {
-      if (checkPageSpace(doc, currentY, 25)) {
-        currentY = addNewPageWithHeader(doc, config, contentWidth);
-      }
-      
-      doc.text('Convenience Fee:', leftColumnX, currentY);
-      doc.text(`₹${backendPricing.convenienceFee.toFixed(2)}`, leftColumnX + 70, currentY);
-      currentY += 8;
+      doc.text('Convenience Fee:', layout.leftColumnX, currentY);
+      doc.text(`₹${backendPricing.convenienceFee.toFixed(2)}`, layout.leftColumnX + 70, currentY);
+      currentY += config.lineHeight + 2;
       
       if (backendPricing.gstAmount > 0) {
-        doc.text('GST (18%):', leftColumnX, currentY);
-        doc.text(`₹${backendPricing.gstAmount.toFixed(2)}`, leftColumnX + 70, currentY);
-        currentY += 8;
+        doc.text('GST (18%):', layout.leftColumnX, currentY);
+        doc.text(`₹${backendPricing.gstAmount.toFixed(2)}`, layout.leftColumnX + 70, currentY);
+        currentY += config.lineHeight + 2;
       }
     }
     
-    // Total amount
-    if (checkPageSpace(doc, currentY, 15)) {
-      currentY = addNewPageWithHeader(doc, config, contentWidth);
-    }
     doc.setFont('helvetica', 'bold');
-    doc.text('Total Amount:', leftColumnX, currentY);
-    doc.text(`₹${backendPricing.totalPrice.toFixed(2)}`, leftColumnX + 70, currentY);
+    doc.text('Total Amount:', layout.leftColumnX, currentY);
+    doc.text(`₹${backendPricing.totalPrice.toFixed(2)}`, layout.leftColumnX + 70, currentY);
   } else {
-    // Enhanced fallback pricing display with convenience fee breakdown
-    console.log('Using fallback pricing data for PDF payment summary');
-    
+    // Fallback pricing display
     const totalPrice = ticketData.totalPrice;
     const convenienceFee = ticketData.convenienceFee || 0;
     const basePrice = totalPrice - convenienceFee;
     
-    doc.text(`Tickets (×${ticketData.booking.quantity}):`, leftColumnX, currentY);
-    doc.text(`₹${basePrice.toFixed(2)}`, leftColumnX + 70, currentY);
-    currentY += 8;
+    doc.text(`Tickets (×${ticketData.booking.quantity}):`, layout.leftColumnX, currentY);
+    doc.text(`₹${basePrice.toFixed(2)}`, layout.leftColumnX + 70, currentY);
+    currentY += config.lineHeight + 2;
     
-    // Show convenience fee breakdown
     if (convenienceFee > 0) {
       const convenienceFeeBeforeGst = convenienceFee / 1.18;
       const gstAmount = convenienceFee - convenienceFeeBeforeGst;
       
-      doc.text('Convenience Fee:', leftColumnX, currentY);
-      doc.text(`₹${convenienceFeeBeforeGst.toFixed(2)}`, leftColumnX + 70, currentY);
-      currentY += 8;
+      doc.text('Convenience Fee:', layout.leftColumnX, currentY);
+      doc.text(`₹${convenienceFeeBeforeGst.toFixed(2)}`, layout.leftColumnX + 70, currentY);
+      currentY += config.lineHeight + 2;
       
       if (gstAmount > 0) {
-        doc.text('GST (18%):', leftColumnX, currentY);
-        doc.text(`₹${gstAmount.toFixed(2)}`, leftColumnX + 70, currentY);
-        currentY += 8;
+        doc.text('GST (18%):', layout.leftColumnX, currentY);
+        doc.text(`₹${gstAmount.toFixed(2)}`, layout.leftColumnX + 70, currentY);
+        currentY += config.lineHeight + 2;
       }
     }
     
-    // Total amount
     doc.setFont('helvetica', 'bold');
-    doc.text('Total Amount:', leftColumnX, currentY);
-    doc.text(`₹${totalPrice.toFixed(2)}`, leftColumnX + 70, currentY);
+    doc.text('Total Amount:', layout.leftColumnX, currentY);
+    doc.text(`₹${totalPrice.toFixed(2)}`, layout.leftColumnX + 70, currentY);
   }
   
-  // Important Notices Section - Handle pagination
-  const noticesX = rightColumnX;
-  let noticesY = Math.max(currentY - 80, guestStartY + config.qrSize + 20);
+  // Responsive important notices section
+  const noticesX = layout.useStacked ? layout.leftColumnX : layout.rightColumnX;
+  let noticesY = layout.useStacked ? currentY + config.sectionSpacing * 2 : Math.max(currentY - 80, guestStartY + config.qrSize + 40);
   
   if (checkPageSpace(doc, noticesY, 60)) {
     noticesY = addNewPageWithHeader(doc, config, contentWidth);
@@ -1072,28 +828,49 @@ export const generateTicketPDF = async (ticketData: TicketData & { eventOccurren
   doc.setFont('helvetica', 'bold');
   doc.text('IMPORTANT NOTICES:', noticesX, noticesY);
   
-  noticesY += 8;
+  noticesY += config.lineHeight + 2;
   doc.setFontSize(config.fontSize.small);
   doc.setFont('helvetica', 'normal');
   
   const notices = [
-    '• Please bring this ticket and a valid ID',
-    '  to the event',
-    '• Entry is subject to security check and',
-    '  event terms',
+    '• Please bring this ticket and valid ID',
+    '• Entry subject to security check',
     '• No refunds or exchanges allowed',
-    '• For support, contact:',
-    '  support@ticketooz.com'
+    '• Support: support@ticketooz.com'
   ];
   
   notices.forEach(notice => {
     if (checkPageSpace(doc, noticesY, 5)) {
       noticesY = addNewPageWithHeader(doc, config, contentWidth);
     }
-    doc.text(notice, noticesX, noticesY);
-    noticesY += 4;
+    noticesY = addResponsiveText(doc, notice, noticesX, noticesY, layout.useStacked ? layout.leftColumnWidth : layout.rightColumnWidth, config.fontSize.small, config);
   });
   
   // Download the PDF with formatted booking ID
   doc.save(`ticket-${formattedBookingId}.pdf`);
+};
+
+// Enhanced responsive layout manager
+const getLayoutConfig = (config: any, pageWidth: number) => {
+  const isSmallLayout = pageWidth < 150;
+  
+  if (isSmallLayout) {
+    // Single column layout for small screens
+    return {
+      leftColumnX: config.margin + config.contentPadding,
+      rightColumnX: config.margin + config.contentPadding,
+      leftColumnWidth: pageWidth - (config.margin * 2) - (config.contentPadding * 2),
+      rightColumnWidth: pageWidth - (config.margin * 2) - (config.contentPadding * 2),
+      useStacked: true
+    };
+  } else {
+    // Two column layout for larger screens
+    return {
+      leftColumnX: config.margin + config.contentPadding,
+      rightColumnX: pageWidth * config.columnSplit,
+      leftColumnWidth: (pageWidth * config.columnSplit) - config.margin - (config.contentPadding * 2),
+      rightColumnWidth: pageWidth * (1 - config.columnSplit) - config.margin - config.contentPadding,
+      useStacked: false
+    };
+  }
 };
