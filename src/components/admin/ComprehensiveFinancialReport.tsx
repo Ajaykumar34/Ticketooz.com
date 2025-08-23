@@ -70,7 +70,7 @@ const ComprehensiveFinancialReport = () => {
   const [reportName, setReportName] = useState('');
   const [loading, setLoading] = useState(false);
   const [individualBookingsData, setIndividualBookingsData] = useState<IndividualBookingMetrics[]>([]);
-  const [totalData, setTotalData] = useState<Omit<IndividualBookingMetrics, 'bookingId' | 'customerState' | 'eventName' | 'bookingDate'> | null>(null);
+  const [totalData, setTotalData] = useState<Omit<IndividualBookingMetrics, 'bookingId' | 'invoiceNumber' | 'customerState' | 'eventName' | 'bookingDate'> | null>(null);
 
   const calculateGSTBreakdown = (customerState: string, gstAmount: number) => {
     const isWBCustomer = customerState === 'West Bengal';
