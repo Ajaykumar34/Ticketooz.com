@@ -312,7 +312,7 @@ const addCompactText = (doc: jsPDF, text: string, x: number, y: number, maxWidth
 };
 
 // Compact ticket breakdown for single page
-const displayCompactTicketBreakdown = (doc: jsPDF, ticketData: TicketData, backendPricing: BackendPricing | null, rightColumnX: number, rightColumnWidth: number, currentY: number) => {
+const displayCompactTicketBreakdown = (doc: jsPDF, ticketData: TicketData, backendPricing: BackendPricing | null, rightColumnX: number, rightColumnWidth: number, currentY: number, config: any) => {
   const isGeneralAdmission = !ticketData.selectedSeats || ticketData.selectedSeats.length === 0;
   
   doc.setFontSize(12);
