@@ -7,10 +7,10 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "12.2.3 (519615d)"
+    PostgrestVersion: "13.0.4"
   }
   public: {
     Tables: {
@@ -1605,7 +1605,7 @@ export type Database = {
         Returns: string
       }
       block_user_with_contacts: {
-        Args: { p_user_id: string; p_reason?: string }
+        Args: { p_reason?: string; p_user_id: string }
         Returns: boolean
       }
       bulk_insert_events_with_occurrences: {
@@ -1615,17 +1615,17 @@ export type Database = {
       calculate_financial_transaction_data: {
         Args: {
           p_booking_id: string
-          p_event_id: string
-          p_ticket_price: number
-          p_quantity: number
           p_customer_state?: string
+          p_event_id: string
           p_event_state?: string
+          p_quantity: number
+          p_ticket_price: number
         }
         Returns: {
-          convenience_fee: number
-          convenience_base_fee: number
-          commission: number
           actual_commission: number
+          commission: number
+          convenience_base_fee: number
+          convenience_fee: number
           gst_on_actual_commission: number
           gst_on_convenience_base_fee: number
           reimbursable_ticket_price: number
@@ -1637,11 +1637,11 @@ export type Database = {
       }
       check_rate_limit: {
         Args: {
-          p_identifier: string
           p_action_type: string
+          p_block_minutes?: number
+          p_identifier: string
           p_max_attempts?: number
           p_window_minutes?: number
-          p_block_minutes?: number
         }
         Returns: boolean
       }
@@ -1664,12 +1664,12 @@ export type Database = {
       generate_event_occurrences: {
         Args:
           | {
-              event_id: string
-              start_date: string
               end_date: string
-              start_time: string
               end_time: string
+              event_id: string
               pattern: string
+              start_date: string
+              start_time: string
             }
           | { p_event_id: string }
         Returns: undefined
@@ -1679,7 +1679,7 @@ export type Database = {
         Returns: string
       }
       generate_formatted_id: {
-        Args: { state_name: string; prefix?: string }
+        Args: { prefix?: string; state_name: string }
         Returns: string
       }
       generate_missing_one_time_occurrences: {
@@ -1689,101 +1689,135 @@ export type Database = {
       generate_recurring_occurrences: {
         Args:
           | {
-              p_event_id: string
-              p_start_date: string
               p_end_date: string
+              p_event_id: string
               p_recurrence_type: string
+              p_start_date: string
+              p_start_time: string
+              p_total_tickets: number
+            }
+          | {
+              p_end_date: string
+              p_event_id: string
+              p_recurrence_type: string
+              p_start_date: string
               p_start_time: string
               p_total_tickets?: number
             }
-          | {
-              p_event_id: string
-              p_start_date: string
-              p_end_date: string
-              p_start_time: string
-              p_recurrence_type: string
-              p_total_tickets: number
-            }
-        Returns: {
-          event_id: string
-          occurrence_date: string
-          occurrence_time: string
-          total_tickets: number
-        }[]
+        Returns: number
       }
       get_booked_seats_for_occurrence: {
         Args: { p_occurrence_id: string }
         Returns: {
+          booking_id: string
+          row_name: string
           seat_id: string
           seat_number: string
-          row_name: string
-          booking_id: string
           status: string
         }[]
       }
       get_general_admission_availability: {
         Args: { p_event_id: string }
         Returns: {
-          seat_category_id: string
-          category_name: string
-          base_price: number
-          convenience_fee: number
-          commission: number
-          total_tickets: number
           available_tickets: number
+          base_price: number
           booked_tickets: number
+          category_name: string
           color: string
+          commission: number
+          convenience_fee: number
+          seat_category_id: string
+          total_tickets: number
         }[]
       }
       get_next_available_date: {
         Args: {
-          event_start_date: string
           event_end_date: string
-          recurrence_type: string
-          event_time: string
           event_expiry_minutes?: number
+          event_start_date: string
+          event_time: string
+          recurrence_type: string
         }
         Returns: string
       }
       get_similar_events: {
         Args:
           | {
-              current_event_id: string
-              current_city: string
               current_category: string
+              current_city: string
+              current_event_id: string
             }
           | {
-              p_event_id: string
               p_category: string
               p_city: string
+              p_event_id: string
               p_limit?: number
             }
         Returns: {
-          id: string
-          name: string
-          description: string
-          start_datetime: string
-          poster: string
+          artist_image: string | null
+          artist_name: string | null
+          artists: Json | null
           category: string
-          sub_category: string
-          venue_name: string
-          venue_city: string
+          category_id: string | null
+          city: string | null
+          created_at: string | null
+          description: string | null
+          duration: number | null
+          end_date: string | null
+          end_datetime: string
+          event_expiry_minutes: number | null
+          event_id_display: string | null
+          event_images: string | null
+          event_logo: string | null
+          event_tags: string | null
+          event_time: string | null
+          "events.tags": Json | null
+          formatted_event_id: string | null
+          genre: string | null
+          genres: Json | null
+          id: string
+          is_active: boolean | null
+          is_featured: boolean | null
+          is_recurring: boolean | null
+          is_regular: boolean | null
+          is_sold_out: boolean | null
+          language: string | null
+          layout_type: string | null
+          name: string
+          poster: string | null
+          recurrence_end_date: string | null
+          recurrence_type: string | null
+          sale_end: string
+          sale_start: string
+          seat_map: Json | null
+          seat_map_config: Json | null
+          sold_out_at: string | null
+          start_date: string | null
+          start_datetime: string
+          state: string | null
+          status: string | null
+          sub_category: string | null
+          tags: string | null
+          terms_and_conditions: string | null
+          updated_at: string | null
+          venue: string | null
+          venue_id: string | null
         }[]
       }
       get_subcategories_by_category: {
         Args: { category_name: string }
         Returns: {
-          id: string
-          name: string
           description: string
+          id: string
           is_active: boolean
+          name: string
         }[]
       }
       get_user_by_mobile: {
         Args: { mobile_num: string }
         Returns: {
-          user_id: string
           email: string
+          user_id: string
         }[]
       }
       initialize_general_admission_categories: {
@@ -1791,11 +1825,11 @@ export type Database = {
         Returns: undefined
       }
       insert_event_with_occurrences: {
-        Args: { p_event_data: Json; p_auto_generate_occurrences?: boolean }
+        Args: { p_auto_generate_occurrences?: boolean; p_event_data: Json }
         Returns: string
       }
       is_contact_blocked: {
-        Args: { p_email?: string; p_phone?: string; p_mobile?: string }
+        Args: { p_email?: string; p_mobile?: string; p_phone?: string }
         Returns: {
           is_blocked: boolean
           reason: string
@@ -1811,14 +1845,14 @@ export type Database = {
       }
       log_security_event: {
         Args: {
-          p_user_id: string
           p_action: string
-          p_resource_type?: string
-          p_resource_id?: string
-          p_ip_address?: unknown
-          p_user_agent?: string
           p_details?: Json
+          p_ip_address?: unknown
+          p_resource_id?: string
+          p_resource_type?: string
           p_severity?: string
+          p_user_agent?: string
+          p_user_id: string
         }
         Returns: undefined
       }
@@ -1862,8 +1896,8 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: {
           booking_id: string
-          issue_type: string
           details: string
+          issue_type: string
         }[]
       }
     }
