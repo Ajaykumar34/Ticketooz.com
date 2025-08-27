@@ -1039,6 +1039,59 @@ export type Database = {
         }
         Relationships: []
       }
+      payments: {
+        Row: {
+          amount: number
+          booking_id: string | null
+          callback_data: Json | null
+          created_at: string
+          currency: string | null
+          id: string
+          merchant_transaction_id: string
+          payment_method: string | null
+          phonepe_transaction_id: string | null
+          response_data: Json | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          booking_id?: string | null
+          callback_data?: Json | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          merchant_transaction_id: string
+          payment_method?: string | null
+          phonepe_transaction_id?: string | null
+          response_data?: Json | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          booking_id?: string | null
+          callback_data?: Json | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          merchant_transaction_id?: string
+          payment_method?: string | null
+          phonepe_transaction_id?: string | null
+          response_data?: Json | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           address: string | null
