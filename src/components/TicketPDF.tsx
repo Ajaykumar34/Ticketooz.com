@@ -1,3 +1,4 @@
+
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
 import { supabase } from '@/integrations/supabase/client';
@@ -604,6 +605,74 @@ export const generateTicketPDF = async (ticketData: TicketData & { eventOccurren
     currentY += config.lineHeight;
     currentY = addCompactText(doc, formattedBookingId, leftColumnX, currentY, leftColumnWidth, config.fontSize.body);
   }
+
+  // Payment Summary - Left Column (moved from right column)
+  currentY += config.sectionSpacing * 2;
+  
+  doc.setFontSize(config.fontSize.heading);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Payment Summary', leftColumnX, currentY);
+  
+  currentY += config.sectionSpacing;
+  doc.setFontSize(config.fontSize.body);
+  doc.setFont('helvetica', 'normal');
+  
+  if (backendPricing) {
+    if (backendPricing.categoryBreakdown && backendPricing.categoryBreakdown.length > 0) {
+      backendPricing.categoryBreakdown.forEach((category) => {
+        doc.text(`${category.category} (×${category.quantity}):`, leftColumnX, currentY);
+        doc.text(`₹${category.totalPrice.toFixed(2)}`, leftColumnX + 55, currentY);
+        currentY += config.lineHeight + 1;
+      });
+    } else {
+      doc.text(`Tickets (×${ticketData.booking.quantity}):`, leftColumnX, currentY);
+      doc.text(`₹${backendPricing.basePrice.toFixed(2)}`, leftColumnX + 55, currentY);
+      currentY += config.lineHeight + 1;
+    }
+    
+    if (backendPricing.convenienceFee > 0) {
+      doc.text('Convenience Fee:', leftColumnX, currentY);
+      doc.text(`₹${backendPricing.convenienceFee.toFixed(2)}`, leftColumnX + 55, currentY);
+      currentY += config.lineHeight + 1;
+      
+      if (backendPricing.gstAmount > 0) {
+        doc.text('GST (18%):', leftColumnX, currentY);
+        doc.text(`₹${backendPricing.gstAmount.toFixed(2)}`, leftColumnX + 55, currentY);
+        currentY += config.lineHeight + 1;
+      }
+    }
+    
+    doc.setFont('helvetica', 'bold');
+    doc.text('Total Amount:', leftColumnX, currentY);
+    doc.text(`₹${backendPricing.totalPrice.toFixed(2)}`, leftColumnX + 55, currentY);
+  } else {
+    const totalPrice = ticketData.totalPrice;
+    const convenienceFee = ticketData.convenienceFee || 0;
+    const basePrice = totalPrice - convenienceFee;
+    
+    doc.text(`Tickets (×${ticketData.booking.quantity}):`, leftColumnX, currentY);
+    doc.text(`₹${basePrice.toFixed(2)}`, leftColumnX + 55, currentY);
+    currentY += config.lineHeight + 1;
+    
+    if (convenienceFee > 0) {
+      const convenienceFeeBeforeGst = convenienceFee / 1.18;
+      const gstAmount = convenienceFee - convenienceFeeBeforeGst;
+      
+      doc.text('Convenience Fee:', leftColumnX, currentY);
+      doc.text(`₹${convenienceFeeBeforeGst.toFixed(2)}`, leftColumnX + 55, currentY);
+      currentY += config.lineHeight + 1;
+      
+      if (gstAmount > 0) {
+        doc.text('GST (18%):', leftColumnX, currentY);
+        doc.text(`₹${gstAmount.toFixed(2)}`, leftColumnX + 55, currentY);
+        currentY += config.lineHeight + 1;
+      }
+    }
+    
+    doc.setFont('helvetica', 'bold');
+    doc.text('Total Amount:', leftColumnX, currentY);
+    doc.text(`₹${totalPrice.toFixed(2)}`, leftColumnX + 55, currentY);
+  }
   
   // QR Code - Right Column
   const qrY = Math.max(ticketY, 120);
@@ -636,74 +705,6 @@ export const generateTicketPDF = async (ticketData: TicketData & { eventOccurren
     doc.setFont('helvetica', 'bold');
     doc.text('QR Code', rightColumnX + config.qrSize/2 - 12, qrY + config.qrSize/2 + 2);
     doc.text('Error', rightColumnX + config.qrSize/2 - 8, qrY + config.qrSize/2 + 8);
-  }
-  
-  // Payment Summary - Below QR Code
-  let paymentY = qrY + config.qrSize + 15;
-  
-  doc.setFontSize(config.fontSize.heading);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Payment Summary', rightColumnX, paymentY);
-  
-  paymentY += config.sectionSpacing;
-  doc.setFontSize(config.fontSize.body);
-  doc.setFont('helvetica', 'normal');
-  
-  if (backendPricing) {
-    if (backendPricing.categoryBreakdown && backendPricing.categoryBreakdown.length > 0) {
-      backendPricing.categoryBreakdown.forEach((category) => {
-        doc.text(`${category.category} (×${category.quantity}):`, rightColumnX, paymentY);
-        doc.text(`₹${category.totalPrice.toFixed(2)}`, rightColumnX + 55, paymentY);
-        paymentY += config.lineHeight + 1;
-      });
-    } else {
-      doc.text(`Tickets (×${ticketData.booking.quantity}):`, rightColumnX, paymentY);
-      doc.text(`₹${backendPricing.basePrice.toFixed(2)}`, rightColumnX + 55, paymentY);
-      paymentY += config.lineHeight + 1;
-    }
-    
-    if (backendPricing.convenienceFee > 0) {
-      doc.text('Convenience Fee:', rightColumnX, paymentY);
-      doc.text(`₹${backendPricing.convenienceFee.toFixed(2)}`, rightColumnX + 55, paymentY);
-      paymentY += config.lineHeight + 1;
-      
-      if (backendPricing.gstAmount > 0) {
-        doc.text('GST (18%):', rightColumnX, paymentY);
-        doc.text(`₹${backendPricing.gstAmount.toFixed(2)}`, rightColumnX + 55, paymentY);
-        paymentY += config.lineHeight + 1;
-      }
-    }
-    
-    doc.setFont('helvetica', 'bold');
-    doc.text('Total Amount:', rightColumnX, paymentY);
-    doc.text(`₹${backendPricing.totalPrice.toFixed(2)}`, rightColumnX + 55, paymentY);
-  } else {
-    const totalPrice = ticketData.totalPrice;
-    const convenienceFee = ticketData.convenienceFee || 0;
-    const basePrice = totalPrice - convenienceFee;
-    
-    doc.text(`Tickets (×${ticketData.booking.quantity}):`, rightColumnX, paymentY);
-    doc.text(`₹${basePrice.toFixed(2)}`, rightColumnX + 55, paymentY);
-    paymentY += config.lineHeight + 1;
-    
-    if (convenienceFee > 0) {
-      const convenienceFeeBeforeGst = convenienceFee / 1.18;
-      const gstAmount = convenienceFee - convenienceFeeBeforeGst;
-      
-      doc.text('Convenience Fee:', rightColumnX, paymentY);
-      doc.text(`₹${convenienceFeeBeforeGst.toFixed(2)}`, rightColumnX + 55, paymentY);
-      paymentY += config.lineHeight + 1;
-      
-      if (gstAmount > 0) {
-        doc.text('GST (18%):', rightColumnX, paymentY);
-        doc.text(`₹${gstAmount.toFixed(2)}`, rightColumnX + 55, paymentY);
-        paymentY += config.lineHeight + 1;
-      }
-    }
-    
-    doc.setFont('helvetica', 'bold');
-    doc.text('Total Amount:', rightColumnX, paymentY);
-    doc.text(`₹${totalPrice.toFixed(2)}`, rightColumnX + 55, paymentY);
   }
   
   // Important Notices - Bottom of page
