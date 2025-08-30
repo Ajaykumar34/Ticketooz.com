@@ -1,487 +1,350 @@
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Filter, Search } from 'lucide-react';
-import { format } from 'date-fns';
-import { cn } from '@/lib/utils';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Calendar, MapPin, Clock, Search, Filter, SlidersHorizontal } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
-import CategoryList from '@/components/CategoryList';
-import PublicEventCard from '@/components/PublicEventCard';
-import SEOHead from '@/components/SEOHead';
-import { usePublicEvents, isEventPast } from '@/hooks/usePublicEvents';
+import { useSEO, seoConfigs } from '@/hooks/useSEO';
+import { useEvents } from '@/hooks/useEvents';
 import { useCategories } from '@/hooks/useCategories';
-import { useSubcategories } from '@/hooks/useSubcategories';
 import { useVenues } from '@/hooks/useVenues';
+import { format } from 'date-fns';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 
 const Events = () => {
+  // Apply SEO configuration
+  useSEO(seoConfigs.events);
+  
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCity, setSelectedCity] = useState(() => {
-    return localStorage.getItem('selectedCity') || '';
-  });
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedSubcategory, setSelectedSubcategory] = useState('');
-  const [selectedState, setSelectedState] = useState('');
-  const [selectedVenue, setSelectedVenue] = useState('');
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
-  const [selectedLanguage, setSelectedLanguage] = useState('');
-  const [priceRange, setPriceRange] = useState('all');
-
-  const { events, loading: eventsLoading } = usePublicEvents();
-  const { categories, loading: categoriesLoading } = useCategories();
-  const { subcategories, loading: subcategoriesLoading } = useSubcategories(selectedCategory);
+  const [selectedCity, setSelectedCity] = useState('');
+  const [selectedDate, setSelectedDate] = useState('');
+  const [priceRange, setPriceRange] = useState('');
+  const [sortBy, setSortBy] = useState('date');
+  
+  const { events, loading, error } = useEvents();
+  const { categories } = useCategories();
   const { venues } = useVenues();
 
-  const cities = [...new Set(events.map(event => event.city).filter(Boolean))];
-  // For now, use Indian states list since venue state data might not be properly loaded
-  const indianStates = [
-    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 
-    'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 
-    'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 
-    'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 
-    'Uttarakhand', 'West Bengal', 'Andaman and Nicobar Islands', 'Chandigarh', 
-    'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 
-    'Lakshadweep', 'Puducherry'
-  ];
-  const states = indianStates;
-  const languages = [...new Set(events.map(event => event.language).filter(Boolean))];
+  const cities = [...new Set(venues.map(venue => venue.city))].filter(Boolean);
 
-  const handleCategorySelect = (category: string) => {
-    setSelectedCategory(category);
-    setSelectedSubcategory(''); // Reset subcategory when category changes
-  };
-
-  const handleCategoryChange = (value: string) => {
-    const category = value === 'all' ? '' : value;
-    setSelectedCategory(category);
-    setSelectedSubcategory(''); // Reset subcategory when category changes
-  };
-
-  const handleSubcategoryChange = (value: string) => {
-    setSelectedSubcategory(value === 'all' ? '' : value);
-  };
-
-  const handleCityChange = (city: string) => {
-    setSelectedCity(city);
-    localStorage.setItem('selectedCity', city);
-    setSelectedVenue('');
-  };
-
-  const handleStateChange = (state: string) => {
-    setSelectedState(state);
-    setSelectedCity('');
-    setSelectedVenue('');
-  };
-
-  const handleClearFilters = () => {
-    setSearchTerm('');
-    setSelectedCategory('');
-    setSelectedSubcategory('');
-    setPriceRange('all');
-    setSelectedState('');
-    setSelectedCity('');
-    setSelectedVenue('');
-    setSelectedDate(undefined);
-    setSelectedLanguage('');
-    localStorage.removeItem('selectedCity');
-  };
-
-  // Filter cities based on selected state
-  const filteredCities = selectedState 
-    ? cities.filter(city => {
-        // For now, show all cities when a state is selected since we need venue-state mapping
-        return true;
-      })
-    : cities;
-
-  // Filter venues based on selected state and city  
-  const filteredVenues = venues.filter(venue => {
-    const matchesCity = !selectedCity || venue.city === selectedCity;
-    return matchesCity; // Remove state filtering for now since venue.state might not be available
-  });
-
-  // Apply filters - show only non-expired events
   const filteredEvents = events.filter(event => {
-    // Exclude expired events
-    if (isEventPast(event)) return false;
+    const matchesSearch = event.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         event.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         event.category?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesSearch =
-      event.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      event.category?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesState = !selectedState; // For now, state filter shows all events since venue state mapping needs to be implemented
-    const matchesCity = !selectedCity || event.city === selectedCity;
-    
-    // Fix category matching - use event.category directly instead of event.categories?.name
     const matchesCategory = selectedCategory === '' || event.category === selectedCategory;
+    const matchesCity = selectedCity === '' || event.city === selectedCity;
     
-    // Fix subcategory matching - use event.sub_category directly
-    const matchesSubcategory = selectedSubcategory === '' || event.sub_category === selectedSubcategory;
-    
-    const matchesVenue = !selectedVenue || event.venue_id === selectedVenue;
-    const matchesLanguage = !selectedLanguage || event.language === selectedLanguage;
-    
-    const matchesDate = !selectedDate || 
-      new Date(event.start_datetime).toDateString() === selectedDate.toDateString();
-    
-    const matchesPrice = priceRange === 'all' ||
-      (priceRange === 'under1000' && (event.price || 0) < 1000) ||
-      (priceRange === '1000-5000' && (event.price || 0) >= 1000 && (event.price || 0) <= 5000) ||
-      (priceRange === 'above5000' && (event.price || 0) > 5000);
+    let matchesDate = true;
+    if (selectedDate) {
+      const eventDate = new Date(event.start_date);
+      const filterDate = new Date(selectedDate);
+      matchesDate = eventDate.toDateString() === filterDate.toDateString();
+    }
 
-    return matchesSearch && matchesState && matchesCity && matchesCategory && matchesSubcategory && 
-           matchesVenue && matchesLanguage && matchesDate && matchesPrice;
+    return matchesSearch && matchesCategory && matchesCity && matchesDate;
   });
 
-  const hasActiveFilters = selectedCategory || selectedSubcategory || selectedState || selectedCity || 
-                          selectedVenue || selectedDate || selectedLanguage || priceRange !== 'all';
+  const sortedEvents = [...filteredEvents].sort((a, b) => {
+    switch (sortBy) {
+      case 'name':
+        return a.name.localeCompare(b.name);
+      case 'price':
+        return (a.min_price || 0) - (b.min_price || 0);
+      case 'date':
+      default:
+        return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
+    }
+  });
 
-  // Generate dynamic SEO content based on filters
-  const generateSEOTitle = () => {
-    let title = "Find Events";
-    if (selectedCity) title += ` in ${selectedCity}`;
-    if (selectedCategory) title += ` - ${selectedCategory}`;
-    return `${title} | Ticketooz`;
-  };
-
-  const generateSEODescription = () => {
-    let description = `Discover ${filteredEvents.length} amazing events`;
-    if (selectedCity) description += ` in ${selectedCity}`;
-    if (selectedCategory) description += ` in ${selectedCategory} category`;
-    description += ". Book tickets now with instant confirmation and best prices.";
-    return description;
-  };
-
-  // Generate structured data for events listing
-  const structuredData = {
-    "@context": "https://schema.org",
-    "@type": "ItemList",
-    "name": `Events${selectedCity ? ` in ${selectedCity}` : ''}${selectedCategory ? ` - ${selectedCategory}` : ''}`,
-    "description": generateSEODescription(),
-    "numberOfItems": filteredEvents.length,
-    "itemListElement": filteredEvents.slice(0, 10).map((event, index) => ({
-      "@type": "Event",
-      "position": index + 1,
-      "name": event.name,
-      "description": event.description,
-      "startDate": event.start_datetime,
-      "location": {
-        "@type": "Place",
-        "name": event.venues?.name || "TBD",
-        "address": event.venues?.address || event.city
-      },
-      "offers": {
-        "@type": "Offer",
-        "price": (event as any).ticket_price_min || 0,
-        "priceCurrency": "INR",
-        "availability": "https://schema.org/InStock"
-      }
-    }))
-  };
-
-  if (eventsLoading || categoriesLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Navbar onSearch={setSearchTerm} />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="text-center py-12">
-            <div className="text-lg">Loading events...</div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="bg-white rounded-lg shadow-sm p-4 animate-pulse">
+                <div className="h-48 bg-gray-200 rounded mb-4"></div>
+                <div className="h-6 bg-gray-200 rounded mb-2"></div>
+                <div className="h-4 bg-gray-200 rounded"></div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <SEOHead
-        title={generateSEOTitle()}
-        description={generateSEODescription()}
-        keywords={`events, tickets, ${selectedCategory || 'entertainment'}, ${selectedCity || 'India'}, concerts, shows`}
-        structuredData={structuredData}
-      />
-      <Navbar onSearch={setSearchTerm} />
-      
-      <CategoryList 
-        onCategorySelect={handleCategorySelect} 
-        selectedCategory={selectedCategory}
-        categories={categories}
-      />
-      
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="flex gap-6">
-          {/* Left Sidebar - Filters */}
-          <div className="w-72 flex-shrink-0">
-            <div className="bg-white rounded-lg shadow-sm p-6 sticky top-6">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-2">
-                  <Filter className="w-5 h-5 text-gray-500" />
-                  <h3 className="text-lg font-semibold">Filters</h3>
-                </div>
-                {hasActiveFilters && (
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={handleClearFilters}
-                    className="text-blue-600 hover:text-blue-700 p-0"
-                  >
-                    Clear All
-                  </Button>
-                )}
-              </div>
-
-              <div className="space-y-6">
-                {/* Search */}
-                <div>
-                  <Label className="text-sm font-medium text-gray-700 mb-2 block">
-                    Search Events
-                  </Label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                    <Input
-                      placeholder="Search events..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-9"
-                    />
-                  </div>
-                </div>
-
-                {/* Category Filter */}
-                <div>
-                  <Label className="text-sm font-medium text-gray-700 mb-2 block">
-                    Category
-                  </Label>
-                  <Select 
-                    value={selectedCategory || 'all'} 
-                    onValueChange={handleCategoryChange}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="All Categories" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Categories</SelectItem>
-                      {categories.map(category => (
-                        <SelectItem key={category.id} value={category.name}>
-                          {category.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Subcategory Filter - Only show when category is selected */}
-                {selectedCategory && (
-                  <div>
-                    <Label className="text-sm font-medium text-gray-700 mb-2 block">
-                      Subcategory
-                    </Label>
-                    <Select 
-                      value={selectedSubcategory || 'all'} 
-                      onValueChange={handleSubcategoryChange}
-                      disabled={subcategoriesLoading}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder={subcategoriesLoading ? "Loading..." : "All Subcategories"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Subcategories</SelectItem>
-                        {subcategories.map(subcategory => (
-                          <SelectItem key={subcategory.id} value={subcategory.name}>
-                            {subcategory.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {/* State Filter */}
-                <div>
-                  <Label className="text-sm font-medium text-gray-700 mb-2 block">
-                    State
-                  </Label>
-                  <Select 
-                    value={selectedState || 'all'} 
-                    onValueChange={(value) => handleStateChange(value === 'all' ? '' : value)}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="All States" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white z-50">
-                      <SelectItem value="all">All States</SelectItem>
-                      {states.map(state => (
-                        <SelectItem key={state} value={state}>{state}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* City Filter */}
-                <div>
-                  <Label className="text-sm font-medium text-gray-700 mb-2 block">
-                    City
-                  </Label>
-                  <Select 
-                    value={selectedCity || 'all'} 
-                    onValueChange={(value) => handleCityChange(value === 'all' ? '' : value)}
-                    disabled={selectedState && filteredCities.length === 0}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder={selectedState && filteredCities.length === 0 ? "No Cities in State" : "All Cities"} />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white z-50">
-                      <SelectItem value="all">All Cities</SelectItem>
-                      {filteredCities.map(city => (
-                        <SelectItem key={city} value={city}>{city}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Venue Filter */}
-                <div>
-                  <Label className="text-sm font-medium text-gray-700 mb-2 block">
-                    Venue
-                  </Label>
-                  <Select 
-                    value={selectedVenue || 'all'} 
-                    onValueChange={(value) => setSelectedVenue(value === 'all' ? '' : value)}
-                    disabled={!selectedCity && !selectedState}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder={!selectedCity && !selectedState ? "Select State/City First" : "All Venues"} />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white z-50">
-                      <SelectItem value="all">All Venues</SelectItem>
-                      {filteredVenues.map(venue => (
-                        <SelectItem key={venue.id} value={venue.id}>{venue.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Date Filter */}
-                <div>
-                  <Label className="text-sm font-medium text-gray-700 mb-2 block">
-                    Date
-                  </Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !selectedDate && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {selectedDate ? format(selectedDate, "PPP") : <span>Any Date</span>}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={selectedDate}
-                        onSelect={setSelectedDate}
-                        disabled={(date) => date < new Date()}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-
-                {/* Language Filter */}
-                <div>
-                  <Label className="text-sm font-medium text-gray-700 mb-2 block">
-                    Language
-                  </Label>
-                  <Select 
-                    value={selectedLanguage || 'all'} 
-                    onValueChange={(value) => setSelectedLanguage(value === 'all' ? '' : value)}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="All Languages" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white z-50">
-                      <SelectItem value="all">All Languages</SelectItem>
-                      {languages.map(language => (
-                        <SelectItem key={language} value={language}>{language}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Price Range Filter */}
-                <div>
-                  <Label className="text-sm font-medium text-gray-700 mb-2 block">
-                    Price Range
-                  </Label>
-                  <Select value={priceRange} onValueChange={setPriceRange}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Price Range" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white z-50">
-                      <SelectItem value="all">All Prices</SelectItem>
-                      <SelectItem value="under1000">Under ₹1,000</SelectItem>
-                      <SelectItem value="1000-5000">₹1,000 - ₹5,000</SelectItem>
-                      <SelectItem value="above5000">Above ₹5,000</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Main Content */}
-          <div className="flex-1">
-            {/* Event Stats */}
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-800">
-                <strong>Results:</strong> {filteredEvents.length} events found
-                {selectedCategory && ` • Category: ${selectedCategory}`}
-                {selectedSubcategory && ` • Subcategory: ${selectedSubcategory}`}
-                {selectedState && ` • State: ${selectedState}`}
-                {selectedCity && ` • City: ${selectedCity}`}
-                {selectedVenue && ` • Venue: ${venues.find(v => v.id === selectedVenue)?.name}`}
-                {searchTerm && ` • Search: "${searchTerm}"`}
-              </p>
-            </div>
-
-            {/* Events Grid */}
-            {filteredEvents.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredEvents.map((event) => (
-                  <PublicEventCard key={event.id} event={event} />
+  const FilterSheet = () => (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button variant="outline" size="sm" className="lg:hidden">
+          <SlidersHorizontal className="h-4 w-4 mr-2" />
+          Filters
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="left" className="w-80">
+        <SheetHeader>
+          <SheetTitle>Filter Events</SheetTitle>
+          <SheetDescription>
+            Narrow down your search to find the perfect event
+          </SheetDescription>
+        </SheetHeader>
+        <div className="grid gap-4 py-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Category</label>
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger>
+                <SelectValue placeholder="All Categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All Categories</SelectItem>
+                {categories.map(category => (
+                  <SelectItem key={category.id} value={category.name}>
+                    {category.name}
+                  </SelectItem>
                 ))}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <div className="text-gray-500 text-lg mb-4">
-                  {events.length === 0 
-                    ? "No events available at the moment." 
-                    : "No events found matching your criteria."
-                  }
-                </div>
-                <div className="text-sm text-gray-400 mb-4">
-                  Try adjusting your filters or search terms.
-                </div>
-                {hasActiveFilters && (
-                  <Button 
-                    variant="outline" 
-                    onClick={handleClearFilters}
-                  >
-                    Clear All Filters
-                  </Button>
-                )}
-              </div>
-            )}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="space-y-2">
+            <label className="text-sm font-medium">City</label>
+            <Select value={selectedCity} onValueChange={setSelectedCity}>
+              <SelectTrigger>
+                <SelectValue placeholder="All Cities" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All Cities</SelectItem>
+                {cities.map(city => (
+                  <SelectItem key={city} value={city}>
+                    {city}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Date</label>
+            <Input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Sort By</label>
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date">Date</SelectItem>
+                <SelectItem value="name">Name</SelectItem>
+                <SelectItem value="price">Price</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
+      </SheetContent>
+    </Sheet>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Navbar onSearch={setSearchTerm} />
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">All Events</h1>
+          <p className="text-gray-600 mb-6">
+            Discover amazing events happening around you
+          </p>
+          
+          {/* Mobile Filters */}
+          <div className="flex items-center gap-4 mb-6 lg:hidden">
+            <div className="flex-1">
+              <Input
+                placeholder="Search events..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full"
+              />
+            </div>
+            <FilterSheet />
+          </div>
+          
+          {/* Desktop Filters */}
+          <div className="hidden lg:grid lg:grid-cols-6 gap-4 mb-6">
+            <div className="col-span-2">
+              <Input
+                placeholder="Search events..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full"
+              />
+            </div>
+            
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger>
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All Categories</SelectItem>
+                {categories.map(category => (
+                  <SelectItem key={category.id} value={category.name}>
+                    {category.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            <Select value={selectedCity} onValueChange={setSelectedCity}>
+              <SelectTrigger>
+                <SelectValue placeholder="City" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All Cities</SelectItem>
+                {cities.map(city => (
+                  <SelectItem key={city} value={city}>
+                    {city}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            <Input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
+            
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger>
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date">Date</SelectItem>
+                <SelectItem value="name">Name</SelectItem>
+                <SelectItem value="price">Price</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Results */}
+        <div className="mb-4">
+          <p className="text-gray-600">
+            {sortedEvents.length} event{sortedEvents.length !== 1 ? 's' : ''} found
+          </p>
+        </div>
+
+        {/* Events Grid */}
+        {sortedEvents.length === 0 ? (
+          <div className="text-center py-12">
+            <h3 className="text-xl font-semibold text-gray-600 mb-4">No Events Found</h3>
+            <p className="text-gray-500 mb-6">
+              Try adjusting your filters to find more events.
+            </p>
+            <Button onClick={() => {
+              setSearchTerm('');
+              setSelectedCategory('');
+              setSelectedCity('');
+              setSelectedDate('');
+            }}>
+              Clear All Filters
+            </Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {sortedEvents.map((event) => (
+              <Card key={event.id} className="overflow-hidden hover:shadow-lg transition-shadow duration-300">
+                <Link to={`/event/${event.id}`}>
+                  <div className="aspect-video bg-gray-200 relative overflow-hidden">
+                    {event.image_url ? (
+                      <img
+                        src={event.image_url}
+                        alt={event.name}
+                        className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-full bg-gradient-to-br from-blue-100 to-purple-100">
+                        <Calendar className="w-12 h-12 text-gray-400" />
+                      </div>
+                    )}
+                    {event.category && (
+                      <Badge className="absolute top-2 left-2 bg-blue-600">
+                        {event.category}
+                      </Badge>
+                    )}
+                  </div>
+                </Link>
+                
+                <CardContent className="p-4">
+                  <Link to={`/event/${event.id}`}>
+                    <h3 className="font-semibold text-lg mb-2 hover:text-blue-600 transition-colors line-clamp-2">
+                      {event.name}
+                    </h3>
+                  </Link>
+                  
+                  <div className="space-y-2 text-sm text-gray-600">
+                    <div className="flex items-center">
+                      <Calendar className="w-4 h-4 mr-2" />
+                      <span>
+                        {event.start_date ? format(new Date(event.start_date), 'MMM dd, yyyy') : 'Date TBA'}
+                      </span>
+                    </div>
+                    
+                    {event.start_time && (
+                      <div className="flex items-center">
+                        <Clock className="w-4 h-4 mr-2" />
+                        <span>{event.start_time}</span>
+                      </div>
+                    )}
+                    
+                    <div className="flex items-center">
+                      <MapPin className="w-4 h-4 mr-2" />
+                      <span className="line-clamp-1">
+                        {event.venue_name ? `${event.venue_name}, ${event.city}` : event.city}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {event.min_price && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <p className="text-lg font-semibold text-green-600">
+                        ₹{event.min_price}
+                        {event.max_price && event.max_price !== event.min_price && (
+                          <span className="text-gray-500"> - ₹{event.max_price}</span>
+                        )}
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

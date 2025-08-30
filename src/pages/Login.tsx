@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -9,6 +8,7 @@ import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import ForgotPasswordForm from '@/components/auth/ForgotPasswordForm';
+import { useSEO, seoConfigs } from '@/hooks/useSEO';
 
 const Login = () => {
   const [emailOrMobile, setEmailOrMobile] = useState('');
@@ -19,6 +19,9 @@ const Login = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { signIn } = useAuth();
+
+  // Apply SEO configuration
+  useSEO(seoConfigs.login);
 
   // Helper function to detect if input is email or mobile
   const isEmail = (input: string) => {

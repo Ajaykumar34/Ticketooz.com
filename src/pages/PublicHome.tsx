@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -9,7 +8,7 @@ import CategoryList from '@/components/CategoryList';
 import CitySelector from '@/components/CitySelector';
 import PublicEventCard from '@/components/PublicEventCard';
 import CookieConsentPopup from '@/components/CookieConsentPopup';
-import SEOHead from '@/components/SEOHead';
+import { useSEO, seoConfigs } from '@/hooks/useSEO';
 import { usePopularEvents, useRegularEvents, useUpcomingEvents, useNonRecurringEvents, isEventSaleEnded, isEventPast } from '@/hooks/usePublicEvents';
 import { useCategories } from '@/hooks/useCategories';
 import { useAuth } from '@/hooks/useAuth';
@@ -25,6 +24,27 @@ const PublicHome = () => {
   });
 
   const { user, loading: authLoading } = useAuth();
+
+  // Use comprehensive SEO configuration
+  useSEO({
+    ...seoConfigs.home,
+    structuredData: [
+      seoConfigs.home.structuredData,
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "TicketooZ",
+        "url": "https://ticketooz.com",
+        "logo": "https://ticketooz.com/lovable-uploads/749dfa90-a1d6-4cd0-87ad-4fec3daeb6d2.png",
+        "sameAs": [
+          "https://facebook.com/ticketooz",
+          "https://x.com/TicketooZ",
+          "https://instagram.com/theticketooz",
+          "https://youtube.com/@TicketooZ"
+        ]
+      }
+    ]
+  });
 
   const { events: popularEvents, loading: popularLoading } = usePopularEvents();
   const { events: regularEvents, loading: regularLoading } = useRegularEvents();
@@ -52,7 +72,6 @@ const PublicHome = () => {
   };
 
   const handleGetStartedClick = () => {
-    // Navigate directly to event request form without login requirement
     navigate('/event-request');
   };
 
@@ -121,33 +140,8 @@ const PublicHome = () => {
   const filteredUpcomingEvents = filterEventsByCategory(filterEventsByCity(upcomingEvents));
   const filteredNonRecurringEvents = filterEventsByCategory(filterEventsByCity(nonRecurringEvents));
 
-  // Generate structured data for homepage
-  const structuredData = {
-    "@context": "https://schema.org",
-    "@type": "WebSite",
-    "name": "Ticketooz",
-    "description": "Book amazing events in your city - concerts, shows, workshops and more",
-    "url": "https://ticketooz.com",
-    "potentialAction": {
-      "@type": "SearchAction",
-      "target": "https://ticketooz.com/events?search={search_term_string}",
-      "query-input": "required name=search_term_string"
-    },
-    "sameAs": [
-      "https://facebook.com/ticketooz",
-      "https://twitter.com/ticketooz",
-      "https://instagram.com/ticketooz"
-    ]
-  };
-
   return (
     <div className="min-h-screen bg-gray-50">
-      <SEOHead
-        title="Ticketooz - Book Amazing Events in Your City"
-        description="Discover and book tickets for concerts, shows, workshops and events in your city. Best prices, secure booking, instant confirmation."
-        keywords="event tickets, concerts, shows, workshops, book events online, entertainment tickets, India events"
-        structuredData={structuredData}
-      />
       <Navbar onSearch={setSearchTerm} />
       
       <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4">
@@ -395,7 +389,6 @@ const PublicHome = () => {
         </div>
       </footer>
       
-      {/* Cookie Consent Popup */}
       <CookieConsentPopup />
     </div>
   );
