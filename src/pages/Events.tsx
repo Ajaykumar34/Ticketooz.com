@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,7 +39,7 @@ const Events = () => {
   const [priceRange, setPriceRange] = useState('');
   const [sortBy, setSortBy] = useState('date');
   
-  const { events, loading, error } = useEvents();
+  const { events, loading } = useEvents();
   const { categories } = useCategories();
   const { venues } = useVenues();
 
@@ -46,31 +47,19 @@ const Events = () => {
 
   const filteredEvents = events.filter(event => {
     const matchesSearch = event.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         event.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         event.category?.toLowerCase().includes(searchTerm.toLowerCase());
+                         event.description?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesCategory = selectedCategory === '' || event.category === selectedCategory;
-    const matchesCity = selectedCity === '' || event.city === selectedCity;
-    
-    let matchesDate = true;
-    if (selectedDate) {
-      const eventDate = new Date(event.start_date);
-      const filterDate = new Date(selectedDate);
-      matchesDate = eventDate.toDateString() === filterDate.toDateString();
-    }
-
-    return matchesSearch && matchesCategory && matchesCity && matchesDate;
+    // Since events functionality is deprecated, we'll just return the search filter
+    return matchesSearch;
   });
 
   const sortedEvents = [...filteredEvents].sort((a, b) => {
     switch (sortBy) {
       case 'name':
         return a.name.localeCompare(b.name);
-      case 'price':
-        return (a.min_price || 0) - (b.min_price || 0);
       case 'date':
       default:
-        return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
+        return new Date(a.start_datetime).getTime() - new Date(b.start_datetime).getTime();
     }
   });
 
@@ -161,7 +150,6 @@ const Events = () => {
               <SelectContent>
                 <SelectItem value="date">Date</SelectItem>
                 <SelectItem value="name">Name</SelectItem>
-                <SelectItem value="price">Price</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -246,7 +234,6 @@ const Events = () => {
               <SelectContent>
                 <SelectItem value="date">Date</SelectItem>
                 <SelectItem value="name">Name</SelectItem>
-                <SelectItem value="price">Price</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -262,9 +249,9 @@ const Events = () => {
         {/* Events Grid */}
         {sortedEvents.length === 0 ? (
           <div className="text-center py-12">
-            <h3 className="text-xl font-semibold text-gray-600 mb-4">No Events Found</h3>
+            <h3 className="text-xl font-semibold text-gray-600 mb-4">No Events Available</h3>
             <p className="text-gray-500 mb-6">
-              Try adjusting your filters to find more events.
+              Events functionality has been temporarily disabled. Please check back later.
             </p>
             <Button onClick={() => {
               setSearchTerm('');
@@ -281,20 +268,12 @@ const Events = () => {
               <Card key={event.id} className="overflow-hidden hover:shadow-lg transition-shadow duration-300">
                 <Link to={`/event/${event.id}`}>
                   <div className="aspect-video bg-gray-200 relative overflow-hidden">
-                    {event.image_url ? (
-                      <img
-                        src={event.image_url}
-                        alt={event.name}
-                        className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                      />
-                    ) : (
-                      <div className="flex items-center justify-center h-full bg-gradient-to-br from-blue-100 to-purple-100">
-                        <Calendar className="w-12 h-12 text-gray-400" />
-                      </div>
-                    )}
-                    {event.category && (
+                    <div className="flex items-center justify-center h-full bg-gradient-to-br from-blue-100 to-purple-100">
+                      <Calendar className="w-12 h-12 text-gray-400" />
+                    </div>
+                    {event.categories && (
                       <Badge className="absolute top-2 left-2 bg-blue-600">
-                        {event.category}
+                        {event.categories.name || 'Event'}
                       </Badge>
                     )}
                   </div>
@@ -311,35 +290,30 @@ const Events = () => {
                     <div className="flex items-center">
                       <Calendar className="w-4 h-4 mr-2" />
                       <span>
-                        {event.start_date ? format(new Date(event.start_date), 'MMM dd, yyyy') : 'Date TBA'}
+                        {event.start_datetime ? format(new Date(event.start_datetime), 'MMM dd, yyyy') : 'Date TBA'}
                       </span>
                     </div>
                     
-                    {event.start_time && (
-                      <div className="flex items-center">
-                        <Clock className="w-4 h-4 mr-2" />
-                        <span>{event.start_time}</span>
-                      </div>
-                    )}
+                    <div className="flex items-center">
+                      <Clock className="w-4 h-4 mr-2" />
+                      <span>
+                        {event.start_datetime ? format(new Date(event.start_datetime), 'HH:mm') : 'Time TBA'}
+                      </span>
+                    </div>
                     
                     <div className="flex items-center">
                       <MapPin className="w-4 h-4 mr-2" />
                       <span className="line-clamp-1">
-                        {event.venue_name ? `${event.venue_name}, ${event.city}` : event.city}
+                        {event.venues?.name || 'Venue TBA'}
                       </span>
                     </div>
                   </div>
                   
-                  {event.min_price && (
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                      <p className="text-lg font-semibold text-green-600">
-                        ₹{event.min_price}
-                        {event.max_price && event.max_price !== event.min_price && (
-                          <span className="text-gray-500"> - ₹{event.max_price}</span>
-                        )}
-                      </p>
-                    </div>
-                  )}
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <p className="text-lg font-semibold text-green-600">
+                      Contact for pricing
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             ))}
