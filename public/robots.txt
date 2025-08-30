@@ -1,14 +1,29 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
 
 User-agent: *
 Allow: /
+
+# Sitemap
+Sitemap: https://ticketooz.com/sitemap.xml
+
+# Disallow admin and private pages
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /profile/
+Disallow: /checkout/
+Disallow: /payment/
+Disallow: /create-admin/
+Disallow: /verify-ticket/
+Disallow: /login/
+Disallow: /register/
+Disallow: /reset-password/
+
+# Allow important pages
+Allow: /
+Allow: /events
+Allow: /about
+Allow: /contact
+Allow: /terms
+Allow: /privacy
+Allow: /cookie-policy
+Allow: /event-request
+Allow: /workshops
