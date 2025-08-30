@@ -25,12 +25,48 @@ Deno.serve(async (req) => {
       }
     )
 
-    const adminEmail = 'admin1@dexotix.com'
-    const adminPassword = 'admin123'
+    // Get request body with admin details
+    const { email, temporaryPassword, firstName, lastName } = await req.json()
 
-    console.log('Starting admin user creation process...')
+    // Validate required fields
+    if (!email || !temporaryPassword || !firstName || !lastName) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Missing required fields: email, temporaryPassword, firstName, lastName' 
+        }),
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
 
-    // First, check if user already exists
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid email format' }),
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
+    // Validate password strength
+    if (temporaryPassword.length < 8) {
+      return new Response(
+        JSON.stringify({ error: 'Password must be at least 8 characters long' }),
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
+    console.log('Starting secure admin user creation process for:', email)
+
+    // Check if user already exists
     const { data: existingUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers()
     
     if (listError) {
@@ -44,7 +80,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    const existingUser = existingUsers.users?.find(u => u.email === adminEmail)
+    const existingUser = existingUsers.users?.find(u => u.email === email)
     
     let userId: string
     
@@ -52,10 +88,17 @@ Deno.serve(async (req) => {
       console.log('Admin user already exists, using existing user ID:', existingUser.id)
       userId = existingUser.id
       
-      // Update password for existing user
+      // Update password for existing user and mark for password change
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
         existingUser.id,
-        { password: adminPassword }
+        { 
+          password: temporaryPassword,
+          user_metadata: {
+            ...existingUser.user_metadata,
+            force_password_change: true,
+            password_changed_at: null
+          }
+        }
       )
       
       if (updateError) {
@@ -69,15 +112,17 @@ Deno.serve(async (req) => {
         )
       }
     } else {
-      // Create the admin user
+      // Create the admin user with temporary password
       console.log('Creating new admin user...')
       const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-        email: adminEmail,
-        password: adminPassword,
+        email: email,
+        password: temporaryPassword,
         email_confirm: true,
         user_metadata: {
-          first_name: 'Admin',
-          last_name: 'User'
+          first_name: firstName,
+          last_name: lastName,
+          force_password_change: true,
+          password_changed_at: null
         }
       })
 
@@ -107,86 +152,83 @@ Deno.serve(async (req) => {
       console.log('Created new admin user with ID:', userId)
     }
 
-    // Check if profiles table exists and create profile record
-    console.log('Checking profiles table...')
-    const { data: profileCheck, error: profileCheckError } = await supabaseAdmin
+    // Check if profiles table exists and create/update profile record
+    console.log('Managing profile record...')
+    const { error: profileUpsertError } = await supabaseAdmin
       .from('profiles')
-      .select('id')
-      .eq('id', userId)
-      .maybeSingle()
+      .upsert({
+        id: userId,
+        email: email,
+        first_name: firstName,
+        last_name: lastName,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'id'
+      })
 
-    if (profileCheckError && !profileCheckError.message.includes('does not exist')) {
-      console.error('Error checking profile:', profileCheckError)
+    if (profileUpsertError) {
+      console.error('Error upserting profile:', profileUpsertError)
+      // Don't fail the entire operation for profile errors
     } else {
-      // Try to upsert profile
-      const { error: profileUpsertError } = await supabaseAdmin
-        .from('profiles')
-        .upsert({
-          id: userId,
-          email: adminEmail,
-          first_name: 'Admin',
-          last_name: 'User'
-        }, {
-          onConflict: 'id'
-        })
-
-      if (profileUpsertError) {
-        console.error('Error upserting profile:', profileUpsertError)
-        // Don't fail the entire operation for profile errors
-      } else {
-        console.log('Profile upserted successfully')
-      }
+      console.log('Profile upserted successfully')
     }
 
-    // Check if admin_users table exists and create admin record
-    console.log('Checking admin_users table...')
-    const { data: adminCheck, error: adminCheckError } = await supabaseAdmin
+    // Check if admin_users table exists and create/update admin record
+    console.log('Managing admin_users record...')
+    const { error: adminUpsertError } = await supabaseAdmin
       .from('admin_users')
-      .select('user_id')
-      .eq('user_id', userId)
-      .maybeSingle()
+      .upsert({
+        user_id: userId,
+        role: 'super_admin',
+        permissions: {
+          events: true,
+          venues: true,
+          categories: true,
+          users: true,
+          bookings: true,
+          reports: true,
+          workshops: true,
+          carousel: true,
+          tags: true
+        },
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'user_id'
+      })
 
-    if (adminCheckError && !adminCheckError.message.includes('does not exist')) {
-      console.error('Error checking admin_users:', adminCheckError)
+    if (adminUpsertError) {
+      console.error('Error upserting admin_users:', adminUpsertError)
+      // Don't fail the entire operation for admin_users errors
     } else {
-      // Try to upsert admin_users record
-      const { error: adminUpsertError } = await supabaseAdmin
-        .from('admin_users')
-        .upsert({
-          user_id: userId,
-          role: 'super_admin',
-          permissions: {
-            events: true,
-            venues: true,
-            categories: true,
-            users: true,
-            bookings: true,
-            reports: true,
-            workshops: true,
-            carousel: true,
-            tags: true
-          }
-        }, {
-          onConflict: 'user_id'
-        })
-
-      if (adminUpsertError) {
-        console.error('Error upserting admin_users:', adminUpsertError)
-        // Don't fail the entire operation for admin_users errors
-      } else {
-        console.log('Admin_users record upserted successfully')
-      }
+      console.log('Admin_users record upserted successfully')
     }
 
-    console.log('Admin user setup completed successfully for:', adminEmail)
+    // Log the admin creation for security audit
+    try {
+      await supabaseAdmin
+        .from('profile_access_logs')
+        .insert({
+          user_id: userId,
+          accessed_profile_id: userId,
+          action: 'admin_user_created',
+          ip_address: req.headers.get('x-forwarded-for') || 'unknown',
+          user_agent: req.headers.get('user-agent') || 'unknown'
+        })
+    } catch (logError) {
+      console.error('Failed to log admin creation:', logError)
+      // Don't fail the operation for logging errors
+    }
+
+    console.log('Secure admin user setup completed successfully for:', email)
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: 'Admin user created/updated successfully',
+        message: 'Admin user created/updated successfully with temporary password. User must change password on first login.',
         user: {
           id: userId,
-          email: adminEmail
+          email: email,
+          force_password_change: true
         }
       }),
       { 

@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { usePasswordChangeEnforcement } from '@/hooks/usePasswordChangeEnforcement';
 
 const INDIAN_STATES = [
   'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 
@@ -56,7 +57,8 @@ const CustomerProfile = () => {
   const [editData, setEditData] = useState<Partial<CustomerData>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(true);
-  
+  const { requiresPasswordChange } = usePasswordChangeEnforcement();
+
   // Birthday and anniversary date states
   const [birthday, setBirthday] = useState<Date>();
   const [anniversaryDate, setAnniversaryDate] = useState<Date>();
@@ -93,6 +95,15 @@ const CustomerProfile = () => {
 
     loadCustomerProfile();
   }, [user, navigate]);
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('force_password_change') === 'true' || requiresPasswordChange) {
+      toast.error('You must change your password to continue using the system', {
+        duration: 10000,
+      });
+    }
+  }, [requiresPasswordChange]);
 
   const loadCustomerProfile = async () => {
     try {
@@ -237,10 +248,10 @@ const CustomerProfile = () => {
       return;
     }
 
-    if (passwordData.newPassword.length < 6) {
+    if (passwordData.newPassword.length < 8) {
       toast({
         title: 'Password Too Short',
-        description: 'Password must be at least 6 characters long.',
+        description: 'Password must be at least 8 characters long.',
         variant: 'destructive'
       });
       return;
@@ -251,7 +262,6 @@ const CustomerProfile = () => {
     try {
       console.log('Starting password update process...');
 
-      // Get the current session
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError || !session?.access_token) {
@@ -266,7 +276,6 @@ const CustomerProfile = () => {
 
       console.log('Session found, calling edge function...');
 
-      // Call the update-password edge function
       const { data, error } = await supabase.functions.invoke('update-password', {
         body: {
           newPassword: passwordData.newPassword
@@ -289,29 +298,39 @@ const CustomerProfile = () => {
       }
 
       if (data?.success) {
-        // Clear the password form
+        // Clear the force_password_change flag if it was set
+        if (requiresPasswordChange) {
+          await supabase.auth.updateUser({
+            data: {
+              force_password_change: false,
+              password_changed_at: new Date().toISOString()
+            }
+          });
+        }
+
         setPasswordData({
           currentPassword: '',
           newPassword: '',
           confirmPassword: ''
         });
 
-        // Show success message and inform user they need to login again
         toast({
           title: 'Password Updated Successfully',
-          description: 'Your password has been updated. Please log in again with your new password.',
+          description: requiresPasswordChange 
+            ? 'Your password has been updated. You can now use the system normally.'
+            : 'Your password has been updated. Please log in again with your new password.',
         });
 
-        // Clear local auth state to prevent automatic login
-        localStorage.setItem('user_signed_out', 'true');
-        
-        // Sign out to force re-authentication with new password
-        await supabase.auth.signOut({ scope: 'global' });
-        
-        // Force page reload to clear any cached auth state
-        setTimeout(() => {
-          window.location.href = '/login';
-        }, 1000);
+        if (!requiresPasswordChange) {
+          localStorage.setItem('user_signed_out', 'true');
+          await supabase.auth.signOut({ scope: 'global' });
+          setTimeout(() => {
+            window.location.href = '/login';
+          }, 1000);
+        } else {
+          // Refresh the page to clear the force password change state
+          window.location.reload();
+        }
         
       } else {
         toast({
@@ -428,6 +447,23 @@ const CustomerProfile = () => {
       <Navbar />
       
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Show password change alert if required */}
+        {requiresPasswordChange && (
+          <div className="mb-6">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center">
+                <Shield className="w-5 h-5 text-red-600 mr-2" />
+                <div>
+                  <h3 className="text-red-800 font-medium">Password Change Required</h3>
+                  <p className="text-red-700 text-sm mt-1">
+                    For security reasons, you must change your password before continuing to use the system.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header Section */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
@@ -468,11 +504,11 @@ const CustomerProfile = () => {
           </div>
         </div>
 
-        <Tabs defaultValue="profile" className="space-y-6">
+        <Tabs defaultValue={requiresPasswordChange ? "security" : "profile"} className="space-y-6">
           <TabsList>
-            <TabsTrigger value="profile">Profile Information</TabsTrigger>
+            <TabsTrigger value="profile" disabled={requiresPasswordChange}>Profile Information</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
-            <TabsTrigger value="preferences">Preferences</TabsTrigger>
+            <TabsTrigger value="preferences" disabled={requiresPasswordChange}>Preferences</TabsTrigger>
           </TabsList>
 
           {/* Profile Tab */}
@@ -836,29 +872,36 @@ const CustomerProfile = () => {
             <Card>
               <CardHeader>
                 <CardTitle>Security Settings</CardTitle>
-                <CardDescription>Update your password and security preferences</CardDescription>
+                <CardDescription>
+                  {requiresPasswordChange 
+                    ? 'You must change your password to continue using the system'
+                    : 'Update your password and security preferences'
+                  }
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Current Password</label>
-                    <div className="relative">
-                      <Input
-                        type={showPasswords.current ? "text" : "password"}
-                        value={passwordData.currentPassword}
-                        onChange={(e) => setPasswordData({...passwordData, currentPassword: e.target.value})}
-                        placeholder="Enter current password"
-                        className="pr-10"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPasswords({...showPasswords, current: !showPasswords.current})}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                      >
-                        {showPasswords.current ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
+                  {!requiresPasswordChange && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Current Password</label>
+                      <div className="relative">
+                        <Input
+                          type={showPasswords.current ? "text" : "password"}
+                          value={passwordData.currentPassword}
+                          onChange={(e) => setPasswordData({...passwordData, currentPassword: e.target.value})}
+                          placeholder="Enter current password"
+                          className="pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPasswords({...showPasswords, current: !showPasswords.current})}
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                        >
+                          {showPasswords.current ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
                   
                   <div className="space-y-2">
                     <label className="text-sm font-medium">New Password</label>
@@ -905,7 +948,7 @@ const CustomerProfile = () => {
                   <div className="bg-blue-50 p-4 rounded-lg">
                     <h4 className="text-sm font-medium text-blue-900 mb-2">Password Requirements:</h4>
                     <ul className="text-sm text-blue-800 space-y-1">
-                      <li>• At least 6 characters long</li>
+                      <li>• At least 8 characters long</li>
                       <li>• Include uppercase and lowercase letters</li>
                       <li>• Include at least one number</li>
                       <li>• Include at least one special character</li>
@@ -914,11 +957,16 @@ const CustomerProfile = () => {
                   
                   <Button 
                     onClick={handlePasswordChange}
-                    className="w-full bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700"
+                    className={`w-full ${requiresPasswordChange ? 'bg-red-600 hover:bg-red-700' : 'bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700'}`}
                     disabled={isUpdatingPassword}
                   >
                     <Shield className="w-4 h-4 mr-2" />
-                    {isUpdatingPassword ? 'Updating Password...' : 'Update Password'}
+                    {isUpdatingPassword 
+                      ? 'Updating Password...' 
+                      : requiresPasswordChange 
+                        ? 'Change Password (Required)' 
+                        : 'Update Password'
+                    }
                   </Button>
                 </div>
               </CardContent>
