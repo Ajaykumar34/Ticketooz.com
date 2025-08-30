@@ -99,8 +99,10 @@ const CustomerProfile = () => {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('force_password_change') === 'true' || requiresPasswordChange) {
-      toast.error('You must change your password to continue using the system', {
-        duration: 10000,
+      toast({
+        title: 'Password Change Required',
+        description: 'You must change your password to continue using the system',
+        variant: 'destructive',
       });
     }
   }, [requiresPasswordChange]);
